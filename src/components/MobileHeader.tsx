@@ -21,7 +21,7 @@ const MobileHeader: React.FC = () => {
             <Menu className="h-6 w-6" />
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="w-64 p-0 border-r-sidebar-border bg-sidebar">
+        <SheetContent side="left" className="w-[26rem] max-w-[90vw] p-0 border-r-sidebar-border bg-sidebar">
           {/* Pass isCollapsed={false} to ensure the mobile sidebar is fully expanded */}
           <Sidebar isCollapsed={false} toggleSidebar={() => {}} isMobileSheet={true} />
         </SheetContent>

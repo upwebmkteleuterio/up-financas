@@ -17,10 +17,12 @@ import {
   Calculator,
   Briefcase,
   Shield,
+  MessageCircle,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { Button } from "./ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import FinanceAiChat from "./FinanceAiChat";
 
 interface NavItemProps {
   to: string;
@@ -72,13 +74,24 @@ const NavItem: React.FC<NavItemProps> = ({
 interface SidebarProps {
   isCollapsed: boolean;
   toggleSidebar: () => void;
-  isMobileSheet?: boolean; 
+  isMobileSheet?: boolean;
+  aiChatOpen?: boolean;
+  onToggleAiChat?: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, toggleSidebar, isMobileSheet = false }) => {
+const Sidebar: React.FC<SidebarProps> = ({
+  isCollapsed,
+  toggleSidebar,
+  isMobileSheet = false,
+  aiChatOpen = false,
+  onToggleAiChat,
+}) => {
   const { signOut } = useAuth();
+  const [mobileAiChatOpen, setMobileAiChatOpen] = React.useState(false);
+  const chatOpen = isMobileSheet ? mobileAiChatOpen : aiChatOpen;
+  const toggleChat = isMobileSheet ? () => setMobileAiChatOpen((open) => !open) : onToggleAiChat;
   
-  const sidebarWidth = isMobileSheet ? "w-full" : isCollapsed ? "w-20" : "w-64";
+  const sidebarWidth = isMobileSheet ? "w-full" : chatOpen ? "w-[26rem]" : isCollapsed ? "w-20" : "w-64";
   const toggleIcon = isCollapsed ? (
     <ChevronRight className="w-5 h-5" />
   ) : (
@@ -122,6 +135,22 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, toggleSidebar, isMobileS
         )}
       </div>
 
+      {!chatOpen && toggleChat && (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={toggleChat}
+          className={cn("mb-4 border-sidebar-border bg-transparent text-sidebar-foreground hover:bg-sidebar-accent/50", isCollapsed && !isMobileSheet ? "px-0" : "justify-start")}
+          aria-label="Abrir assistente financeiro"
+        >
+          <MessageCircle className="h-5 w-5" />
+          {(!isCollapsed || isMobileSheet) && <span className="ml-3">Assistente financeiro</span>}
+        </Button>
+      )}
+
+      {chatOpen ? (
+        <FinanceAiChat onClose={() => toggleChat?.()} />
+      ) : (
       <div className="flex-grow overflow-y-auto pr-1">
         <nav className="space-y-1">
           {!isCollapsed && (
@@ -159,6 +188,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, toggleSidebar, isMobileS
           </Button>
         </div>
       </div>
+      )}
     </div>
   );
 };

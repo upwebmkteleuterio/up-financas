@@ -14,6 +14,7 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children, pageTitle, pageSubtitle = "" }) => {
   const { isCollapsed, toggleSidebar } = useSidebar();
+  const [aiChatOpen, setAiChatOpen] = React.useState(false);
   const isMobile = useIsMobile(); // Check if it's mobile
   const { setTitle } = usePageTitle(); // Hook para definir o título
 
@@ -22,17 +23,22 @@ const Layout: React.FC<LayoutProps> = ({ children, pageTitle, pageSubtitle = "" 
     setTitle(pageTitle, pageSubtitle);
   }, [pageTitle, pageSubtitle, setTitle]);
   
-  // Largura da sidebar: 64 (256px) expandida, 20 (80px) recolhida
-  // Se for mobile, a margem é 0, pois a sidebar fixa está oculta.
-  const contentMargin = isMobile ? "ml-0" : (isCollapsed ? "ml-20" : "ml-64");
+  // Largura da sidebar: 64 (256px) expandida, 20 (80px) recolhida.
+  // O chat ocupa uma largura maior, sem criar uma rota extra.
+  const contentMargin = isMobile ? "ml-0" : (aiChatOpen ? "ml-[26rem]" : (isCollapsed ? "ml-20" : "ml-64"));
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       
       {/* 1. Sidebar Desktop (Fixo) - Visível apenas em telas >= lg */}
       {!isMobile && (
-        <div className="fixed top-0 left-0 h-screen z-10">
-          <Sidebar isCollapsed={isCollapsed} toggleSidebar={toggleSidebar} />
+        <div className="fixed top-0 left-0 z-10 h-screen">
+          <Sidebar
+            isCollapsed={isCollapsed}
+            toggleSidebar={toggleSidebar}
+            aiChatOpen={aiChatOpen}
+            onToggleAiChat={() => setAiChatOpen((open) => !open)}
+          />
         </div>
       )}
       
