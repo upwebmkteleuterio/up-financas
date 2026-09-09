@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "app.vercel.upfinancas.twa",
+    "sha256_cert_fingerprints": [
+      "4F:67:58:3F:51:2B:74:F2:AA:A7:2E:13:6F:95:7F:DB:8D:68:1F:B8:AD:AE:59:94:3A:51:5E:54:32:B8:07:33"
+    ]
+  }
+}]
