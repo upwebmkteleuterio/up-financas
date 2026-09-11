@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { ThinkingOrb } from "@/components/ui/thinking-orbs";
+import type { SpeechTranscriptSegment } from "@/components/FinanceAiChat";
 import type { AiChatMessage } from "@/types/finance-ai";
 
 interface AnimatedAiChatProps {
@@ -14,6 +15,8 @@ interface AnimatedAiChatProps {
   isRecording: boolean;
   error: string | null;
   speechMessage: string | null;
+  confirmedVoiceSegments: SpeechTranscriptSegment[];
+  interimVoiceSegment: string | null;
   draft?: React.ReactNode;
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
   onInputChange: (value: string) => void;
@@ -40,6 +43,8 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
   isRecording,
   error,
   speechMessage,
+  confirmedVoiceSegments,
+  interimVoiceSegment,
   draft,
   inputRef,
   onInputChange,
@@ -84,13 +89,15 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
     if (!isLoading) event.currentTarget.form?.requestSubmit();
   };
 
+  const hasVoicePreview = isRecording && (confirmedVoiceSegments.length > 0 || Boolean(interimVoiceSegment));
+
   return (
     <section className="lab-bg relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#07110f] text-slate-100" aria-label="Chat financeiro com IA">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(53,211,153,0.14),transparent_34%),radial-gradient(circle_at_100%_85%,rgba(59,130,246,0.12),transparent_38%)]" aria-hidden="true" />
       <header className="relative z-10 flex items-center justify-between border-b border-white/[0.08] bg-black/10 px-5 py-3 backdrop-blur-xl">
         <div>
           <h2 className="text-sm font-semibold tracking-wide text-white">Assistente financeiro</h2>
-          <p className="mt-1 text-xs text-slate-400">Rascunhos seguros, confirmação explícita</p>
+          <p className="mt-1 text-xs text-slate-400">Seu assistente pronto para lançamentos financeiros</p>
         </div>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" onClick={onSettings} aria-label="Configurar instrução personalizada" className="text-slate-400 hover:bg-white/[0.08] hover:text-white">
@@ -158,6 +165,39 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
           {error && <p role="alert" className="mb-2 px-1 text-xs text-red-300">{error}</p>}
           {speechMessage && <p className="mb-2 px-1 text-xs text-slate-400">{speechMessage}</p>}
           <form onSubmit={onSubmit} className="rounded-2xl border border-white/[0.12] bg-white/[0.06] p-2 shadow-2xl shadow-black/20 backdrop-blur-xl">
+            {hasVoicePreview && (
+              <div
+                className="pointer-events-none mb-1 flex flex-wrap items-center gap-x-1 gap-y-0.5 px-2 pt-1 text-xs leading-5 text-emerald-100/90"
+                aria-live="polite"
+                aria-label="Prévia da transcrição de voz"
+              >
+                <AnimatePresence initial={false} mode="popLayout">
+                  {confirmedVoiceSegments.map((segment) => (
+                    <motion.span
+                      key={segment.id}
+                      initial={{ opacity: 0.28, y: 3 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.42, ease: "easeOut" }}
+                      className="inline-block"
+                    >
+                      {segment.text}
+                    </motion.span>
+                  ))}
+                  {interimVoiceSegment && (
+                    <motion.span
+                      key="voice-interim"
+                      initial={{ opacity: 0.2 }}
+                      animate={{ opacity: 0.52 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="inline-block text-emerald-100/70"
+                    >
+                      {interimVoiceSegment}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
             <Textarea
               ref={textareaRef}
               value={input}

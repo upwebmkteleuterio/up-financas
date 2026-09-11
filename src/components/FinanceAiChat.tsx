@@ -22,6 +22,7 @@ interface SpeechRecognitionResultItem {
 }
 
 interface SpeechRecognitionEventLike extends Event {
+  resultIndex: number;
   results: ArrayLike<ArrayLike<SpeechRecognitionResultItem>>;
 }
 
@@ -35,6 +36,13 @@ interface SpeechRecognitionLike {
   start: () => void;
   stop: () => void;
 }
+
+export interface SpeechTranscriptSegment {
+  id: string;
+  text: string;
+}
+
+type SpeechResult = Pick<SpeechRecognitionResultItem, "transcript" | "isFinal">;
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
@@ -76,11 +84,28 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
   const [isPromptSaving, setIsPromptSaving] = useState(false);
   const [promptStatus, setPromptStatus] = useState<string | null>(null);
   const [promptError, setPromptError] = useState<string | null>(null);
+  const [confirmedVoiceSegments, setConfirmedVoiceSegments] = useState<SpeechTranscriptSegment[]>([]);
+  const [interimVoiceSegment, setInterimVoiceSegment] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const isLoadingRef = useRef(false);
+  const pauseTimerRef = useRef<number | null>(null);
+  const speechResultsRef = useRef<Map<number, SpeechResult>>(new Map());
+  const forcedFinalIndexesRef = useRef(new Set<number>());
+  const punctuatedIndexesRef = useRef(new Set<number>());
+  const voiceBaseInputRef = useRef("");
+  const voiceSessionRef = useRef(0);
 
-  useEffect(() => () => recognitionRef.current?.stop(), []);
+  useEffect(() => () => {
+    if (pauseTimerRef.current !== null) window.clearTimeout(pauseTimerRef.current);
+    const recognition = recognitionRef.current;
+    if (recognition) {
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+      recognition.stop();
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -152,34 +177,141 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     await invokeChat("chat", text, undefined, conversation);
   };
 
+  const clearPauseTimer = () => {
+    if (pauseTimerRef.current !== null) {
+      window.clearTimeout(pauseTimerRef.current);
+      pauseTimerRef.current = null;
+    }
+  };
+
+  const addAutomaticPeriod = (text: string) => {
+    const trimmedText = text.trim();
+    if (!trimmedText || /[.!?]$/.test(trimmedText)) return trimmedText;
+    return `${trimmedText}.`;
+  };
+
+  const updateVoicePreview = () => {
+    const entries = Array.from(speechResultsRef.current.entries()).sort(([left], [right]) => left - right);
+    const confirmed = entries
+      .filter(([index, result]) => result.isFinal || forcedFinalIndexesRef.current.has(index))
+      .map(([index, result]) => ({
+        id: `voice-${voiceSessionRef.current}-${index}`,
+        text: punctuatedIndexesRef.current.has(index) ? addAutomaticPeriod(result.transcript) : result.transcript.trim(),
+      }))
+      .filter((segment) => segment.text);
+    const interim = entries
+      .filter(([index, result]) => !result.isFinal && !forcedFinalIndexesRef.current.has(index))
+      .map(([, result]) => result.transcript.trim())
+      .filter(Boolean)
+      .join(" ") || null;
+    const transcript = [...confirmed.map((segment) => segment.text), interim].filter(Boolean).join(" ");
+    const nextInput = [voiceBaseInputRef.current, transcript].filter(Boolean).join(" ");
+
+    setConfirmedVoiceSegments(confirmed);
+    setInterimVoiceSegment(interim);
+    setInput(nextInput);
+  };
+
+  const finalizePendingSpeech = () => {
+    const entries = Array.from(speechResultsRef.current.entries()).sort(([left], [right]) => left - right);
+    const pending = [...entries].reverse().find(([index, result]) => !result.isFinal && !forcedFinalIndexesRef.current.has(index));
+    const latest = entries.at(-1);
+    if (pending) forcedFinalIndexesRef.current.add(pending[0]);
+    if (latest) punctuatedIndexesRef.current.add(latest[0]);
+    updateVoicePreview();
+  };
+
+  const scheduleSpeechPause = () => {
+    clearPauseTimer();
+    pauseTimerRef.current = window.setTimeout(() => {
+      pauseTimerRef.current = null;
+      finalizePendingSpeech();
+    }, 1000);
+  };
+
+  const finishRecording = (recognition: SpeechRecognitionLike | null, finalize: boolean) => {
+    if (recognition && recognitionRef.current !== recognition) return;
+    clearPauseTimer();
+    if (finalize) finalizePendingSpeech();
+    const activeRecognition = recognitionRef.current;
+    if (activeRecognition) {
+      activeRecognition.onresult = null;
+      activeRecognition.onerror = null;
+      activeRecognition.onend = null;
+    }
+    recognitionRef.current = null;
+    setIsRecording(false);
+    if (activeRecognition && activeRecognition !== recognition) activeRecognition.stop();
+  };
+
   const startRecording = () => {
     const SpeechRecognition = (window as SpeechWindow).SpeechRecognition || (window as SpeechWindow).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setSpeechMessage("Seu navegador não oferece reconhecimento de voz. Digite a mensagem.");
       return;
     }
-    if (isRecording) {
-      recognitionRef.current?.stop();
+    if (recognitionRef.current || isRecording) {
+      const recognition = recognitionRef.current;
+      if (recognition) {
+        finalizePendingSpeech();
+        finishRecording(recognition, false);
+        setSpeechMessage("Transcrição pronta. Revise o texto antes de enviar.");
+        recognition.stop();
+      } else {
+        setIsRecording(false);
+      }
       return;
     }
+
+    voiceSessionRef.current += 1;
+    speechResultsRef.current.clear();
+    forcedFinalIndexesRef.current.clear();
+    punctuatedIndexesRef.current.clear();
+    voiceBaseInputRef.current = input.trim();
+    setConfirmedVoiceSegments([]);
+    setInterimVoiceSegment(null);
+
     const recognition = new SpeechRecognition();
     recognition.lang = "pt-BR";
-    recognition.interimResults = false;
-    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.continuous = true;
     recognition.onresult = (event) => {
-      const transcript = Array.from({ length: event.results.length }, (_, index) => event.results[index][0].transcript).join(" ");
-      setInput((current) => `${current} ${transcript}`.trim());
-      setSpeechMessage("Transcrição pronta. Revise o texto antes de enviar.");
+      if (recognitionRef.current !== recognition) return;
+      const startIndex = Math.max(0, event.resultIndex);
+      for (let index = startIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const item = result?.[0];
+        if (!item) continue;
+        const previous = speechResultsRef.current.get(index);
+        if (previous && previous.transcript !== item.transcript && !item.isFinal) {
+          forcedFinalIndexesRef.current.delete(index);
+          punctuatedIndexesRef.current.delete(index);
+        }
+        speechResultsRef.current.set(index, { transcript: item.transcript, isFinal: item.isFinal });
+      }
+      updateVoicePreview();
+      setSpeechMessage("Ouvindo em português (Brasil)…");
+      scheduleSpeechPause();
     };
     recognition.onerror = (event) => {
+      if (recognitionRef.current !== recognition) return;
       setSpeechMessage(event.error === "not-allowed" ? "Permita o microfone para usar a voz." : "Não foi possível reconhecer a fala.");
-      setIsRecording(false);
+      finishRecording(recognition, true);
     };
-    recognition.onend = () => setIsRecording(false);
+    recognition.onend = () => {
+      if (recognitionRef.current !== recognition) return;
+      finishRecording(recognition, true);
+      setSpeechMessage("Transcrição pronta. Revise o texto antes de enviar.");
+    };
     recognitionRef.current = recognition;
     setSpeechMessage("Ouvindo em português (Brasil)…");
     setIsRecording(true);
-    recognition.start();
+    try {
+      recognition.start();
+    } catch {
+      setSpeechMessage("Não foi possível iniciar o reconhecimento de voz.");
+      finishRecording(recognition, true);
+    }
   };
 
   const confirmDraft = async () => {
@@ -255,6 +387,8 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
         isRecording={isRecording}
         error={error}
         speechMessage={speechMessage}
+        confirmedVoiceSegments={confirmedVoiceSegments}
+        interimVoiceSegment={interimVoiceSegment}
         draft={draftCard}
         inputRef={inputRef}
         onInputChange={setInput}
