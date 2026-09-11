@@ -105,35 +105,37 @@ const Sidebar: React.FC<SidebarProps> = ({
       className={cn(
         "flex flex-col h-full bg-sidebar border-r border-sidebar-border transition-all duration-300",
         sidebarWidth,
-        isMobileSheet ? "p-4" : "p-4 flex-shrink-0",
+        chatOpen ? "p-0" : isMobileSheet ? "p-4" : "p-4 flex-shrink-0",
       )}
     >
-      <div className="mb-8 p-2 flex items-center justify-between flex-shrink-0">
-        {(!isCollapsed || isMobileSheet) && (
-          <div className="overflow-hidden">
-            <h1 className="text-xl font-bold text-sidebar-primary-foreground text-white whitespace-nowrap">
-              UpWeb
-            </h1>
-            <p className="text-sm text-gray-400 whitespace-nowrap truncate" title={displaySubtitle}>
-              {displaySubtitle}
-            </p>
-          </div>
-        )}
-        
-        {!isMobileSheet && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleSidebar}
-              className={cn(
-                "text-sidebar-foreground hover:bg-sidebar-accent/50",
-                isCollapsed ? "mx-auto" : "ml-auto",
-              )}
-            >
-              {toggleIcon}
-            </Button>
-        )}
-      </div>
+      {!chatOpen && (
+        <div className="mb-8 p-2 flex items-center justify-between flex-shrink-0">
+          {(!isCollapsed || isMobileSheet) && (
+            <div className="overflow-hidden">
+              <h1 className="text-xl font-bold text-sidebar-primary-foreground text-white whitespace-nowrap">
+                UpWeb
+              </h1>
+              <p className="text-sm text-gray-400 whitespace-nowrap truncate" title={displaySubtitle}>
+                {displaySubtitle}
+              </p>
+            </div>
+          )}
+          
+          {!isMobileSheet && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleSidebar}
+                className={cn(
+                  "text-sidebar-foreground hover:bg-sidebar-accent/50",
+                  isCollapsed ? "mx-auto" : "ml-auto",
+                )}
+              >
+                {toggleIcon}
+              </Button>
+          )}
+        </div>
+      )}
 
       {!chatOpen && toggleChat && (
         <Button

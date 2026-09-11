@@ -1,8 +1,18 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Mic, MicOff, Pencil } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { DEFAULT_FINANCE_AI_PROMPT } from "@/lib/finance-ai-prompt";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import AnimatedAiChat from "@/components/ui/animated-ai-chat";
 import type { AiChatMessage, AiChatResponse, AiTransactionDraft } from "@/types/finance-ai";
 
@@ -59,12 +69,52 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
   const [error, setError] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [speechMessage, setSpeechMessage] = useState<string | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [prompt, setPrompt] = useState(DEFAULT_FINANCE_AI_PROMPT);
+  const [savedPrompt, setSavedPrompt] = useState(DEFAULT_FINANCE_AI_PROMPT);
+  const [isPromptLoading, setIsPromptLoading] = useState(true);
+  const [isPromptSaving, setIsPromptSaving] = useState(false);
+  const [promptStatus, setPromptStatus] = useState<string | null>(null);
+  const [promptError, setPromptError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const isLoadingRef = useRef(false);
 
   useEffect(() => () => recognitionRef.current?.stop(), []);
 
-  const invokeChat = useCallback(async (mode: "chat" | "execute", text?: string, draftToExecute?: AiTransactionDraft) => {
+  useEffect(() => {
+    let active = true;
+    const loadPrompt = async () => {
+      const { data, error: loadError } = await supabase
+        .from("finance_ai_settings")
+        .select("system_prompt")
+        .maybeSingle();
+      if (!active) return;
+      if (loadError) {
+        setPromptError("Não foi possível carregar sua instrução personalizada.");
+      } else {
+        const loadedPrompt = typeof data?.system_prompt === "string" && data.system_prompt.trim()
+          ? data.system_prompt
+          : DEFAULT_FINANCE_AI_PROMPT;
+        setPrompt(loadedPrompt);
+        setSavedPrompt(loadedPrompt);
+      }
+      setIsPromptLoading(false);
+    };
+    void loadPrompt();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const invokeChat = useCallback(async (
+    mode: "chat" | "execute",
+    text?: string,
+    draftToExecute?: AiTransactionDraft,
+    conversation: AiChatMessage[] = messages,
+  ) => {
+    if (isLoadingRef.current) return;
+    isLoadingRef.current = true;
     setIsLoading(true);
     setError(null);
     try {
@@ -72,7 +122,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
         body: {
           mode,
           message: text,
-          messages,
+          messages: conversation,
           draft: draftToExecute,
           confirmed: mode === "execute",
         },
@@ -80,23 +130,26 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
       if (invokeError) throw invokeError;
       if (!data) throw new Error("A IA não retornou uma resposta.");
       if (data.kind === "error") throw new Error(data.message);
-      if (text) setMessages((current) => [...current, { role: "user", content: text }]);
       setMessages((current) => [...current, { role: "assistant", content: data.message }]);
       setDraft(data.draft ? formatDraftField(data.draft) : mode === "execute" || Boolean(text) ? null : draft);
       if (mode === "execute") setDraft(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível falar com a IA.");
     } finally {
+      isLoadingRef.current = false;
       setIsLoading(false);
     }
-  }, [messages, draft]);
+  }, [draft, messages]);
 
   const sendMessage = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = input.trim();
-    if (!text || isLoading) return;
+    if (!text || isLoadingRef.current) return;
+    const userMessage: AiChatMessage = { role: "user", content: text };
+    const conversation = [...messages, userMessage];
     setInput("");
-    await invokeChat("chat", text);
+    setMessages(conversation);
+    await invokeChat("chat", text, undefined, conversation);
   };
 
   const startRecording = () => {
@@ -130,13 +183,50 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
   };
 
   const confirmDraft = async () => {
-    if (!draft || isLoading) return;
+    if (!draft || isLoadingRef.current) return;
     await invokeChat("execute", undefined, draft);
   };
 
   const requestChange = () => {
     setInput("Quero alterar este lançamento: ");
     inputRef.current?.focus();
+  };
+
+  const handleSettingsOpenChange = (open: boolean) => {
+    setIsSettingsOpen(open);
+    if (open) {
+      setPrompt(savedPrompt);
+      setPromptStatus(null);
+    }
+  };
+
+  const savePrompt = async () => {
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+      setPromptError("A instrução personalizada não pode ficar vazia.");
+      setPromptStatus(null);
+      return;
+    }
+    setIsPromptSaving(true);
+    setPromptError(null);
+    setPromptStatus(null);
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user) throw new Error("Sua sessão expirou. Entre novamente para salvar.");
+      const { error: saveError } = await supabase.from("finance_ai_settings").upsert({
+        user_id: userData.user.id,
+        system_prompt: trimmedPrompt,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id" });
+      if (saveError) throw saveError;
+      setPrompt(trimmedPrompt);
+      setSavedPrompt(trimmedPrompt);
+      setPromptStatus("Instrução salva.");
+    } catch (caught) {
+      setPromptError(caught instanceof Error ? caught.message : "Não foi possível salvar a instrução.");
+    } finally {
+      setIsPromptSaving(false);
+    }
   };
 
   const draftCard = draft && (
@@ -157,20 +247,53 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
   );
 
   return (
-    <AnimatedAiChat
-      messages={messages}
-      input={input}
-      isLoading={isLoading}
-      isRecording={isRecording}
-      error={error}
-      speechMessage={speechMessage}
-      draft={draftCard}
-      inputRef={inputRef}
-      onInputChange={setInput}
-      onSubmit={sendMessage}
-      onVoice={startRecording}
-      onClose={onClose}
-    />
+    <>
+      <AnimatedAiChat
+        messages={messages}
+        input={input}
+        isLoading={isLoading}
+        isRecording={isRecording}
+        error={error}
+        speechMessage={speechMessage}
+        draft={draftCard}
+        inputRef={inputRef}
+        onInputChange={setInput}
+        onSubmit={sendMessage}
+        onVoice={startRecording}
+        onSettings={() => handleSettingsOpenChange(true)}
+        onClose={onClose}
+      />
+
+      <Dialog open={isSettingsOpen} onOpenChange={handleSettingsOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Instrução personalizada</DialogTitle>
+            <DialogDescription>
+              Oriente o assistente com preferências suas. As regras de segurança, validação e confirmação do sistema continuam obrigatórias.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Textarea
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              disabled={isPromptLoading || isPromptSaving}
+              rows={8}
+              aria-label="Instrução personalizada do assistente financeiro"
+              placeholder={DEFAULT_FINANCE_AI_PROMPT}
+            />
+            {isPromptLoading && <p className="text-sm text-muted-foreground">Carregando instrução…</p>}
+            {promptStatus && <p className="text-sm text-emerald-600">{promptStatus}</p>}
+            {promptError && <p role="alert" className="text-sm text-destructive">{promptError}</p>}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsSettingsOpen(false)} disabled={isPromptSaving}>Cancelar</Button>
+            <Button type="button" onClick={savePrompt} disabled={isPromptLoading || isPromptSaving}>
+              {isPromptSaving ? "Salvando…" : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 

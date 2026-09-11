@@ -1,9 +1,10 @@
-import React, { useLayoutEffect, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUp, Loader2, Mic, MicOff, X } from "lucide-react";
+import { ArrowUp, Mic, MicOff, Settings, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import { ThinkingOrb } from "@/components/ui/thinking-orbs";
 import type { AiChatMessage } from "@/types/finance-ai";
 
 interface AnimatedAiChatProps {
@@ -18,8 +19,19 @@ interface AnimatedAiChatProps {
   onInputChange: (value: string) => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void>;
   onVoice: () => void;
+  onSettings: () => void;
   onClose: () => void;
 }
+
+const thinkingStatuses = [
+  "Verificando pedido...",
+  "Coletando informações...",
+  "Analisando tudo...",
+  "Revisando...",
+  "Tudo pronto.",
+] as const;
+
+const thinkingOrbStates = ["searching", "connecting", "solving", "composing", "breathing"] as const;
 
 const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
   messages,
@@ -33,10 +45,30 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
   onInputChange,
   onSubmit,
   onVoice,
+  onSettings,
   onClose,
 }) => {
   const fallbackInputRef = useRef<HTMLTextAreaElement | null>(null);
   const textareaRef = inputRef || fallbackInputRef;
+  const [thinkingIndex, setThinkingIndex] = useState(0);
+
+  useEffect(() => {
+    if (!isLoading) {
+      setThinkingIndex(0);
+      return;
+    }
+    setThinkingIndex(0);
+    const interval = window.setInterval(() => {
+      setThinkingIndex((current) => {
+        if (current >= thinkingStatuses.length - 1) {
+          window.clearInterval(interval);
+          return current;
+        }
+        return current + 1;
+      });
+    }, 3000);
+    return () => window.clearInterval(interval);
+  }, [isLoading]);
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
@@ -55,14 +87,19 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
   return (
     <section className="lab-bg relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#07110f] text-slate-100" aria-label="Chat financeiro com IA">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(53,211,153,0.14),transparent_34%),radial-gradient(circle_at_100%_85%,rgba(59,130,246,0.12),transparent_38%)]" aria-hidden="true" />
-      <header className="relative z-10 flex items-center justify-between border-b border-white/[0.08] bg-black/10 px-5 py-4 backdrop-blur-xl">
+      <header className="relative z-10 flex items-center justify-between border-b border-white/[0.08] bg-black/10 px-5 py-3 backdrop-blur-xl">
         <div>
           <h2 className="text-sm font-semibold tracking-wide text-white">Assistente financeiro</h2>
           <p className="mt-1 text-xs text-slate-400">Rascunhos seguros, confirmação explícita</p>
         </div>
-        <Button variant="ghost" size="icon" onClick={onClose} aria-label="Voltar ao menu" className="text-slate-400 hover:bg-white/[0.08] hover:text-white">
-          <X className="h-5 w-5" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" onClick={onSettings} aria-label="Configurar instrução personalizada" className="text-slate-400 hover:bg-white/[0.08] hover:text-white">
+            <Settings className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Voltar ao menu" className="text-slate-400 hover:bg-white/[0.08] hover:text-white">
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
       </header>
 
       <ScrollArea className="relative z-10 min-h-0 flex-1 px-4 py-5">
@@ -90,9 +127,15 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
-                className="self-start rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-sm text-slate-400"
+                className="flex items-center gap-3 self-start rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-sm text-slate-400"
               >
-                <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin text-emerald-300" />Processando…</span>
+                <ThinkingOrb
+                  state={thinkingOrbStates[thinkingIndex]}
+                  size={20}
+                  theme="dark"
+                  aria-label={thinkingStatuses[thinkingIndex]}
+                />
+                <span>{thinkingStatuses[thinkingIndex]}</span>
               </motion.div>
             )}
 
