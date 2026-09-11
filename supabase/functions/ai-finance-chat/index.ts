@@ -191,18 +191,73 @@ function normalizeDate(value: unknown, inferredDate?: string, allowSimpleValues 
   return inferredDate && isValidIsoDate(inferredDate) ? inferredDate : undefined;
 }
 
+const isProfitWithdrawalText = (text: string) => {
+  const normalizedText = normalizeComparable(text);
+  return normalizedText.includes("saque de lucro") || normalizedText.includes("saque de lucros") ||
+    (normalizedText.includes("saida") && normalizedText.includes("saque")) ||
+    (normalizedText.includes("saida") && normalizedText.includes("socio"));
+};
+
+const extractValueFromText = (text: string) => {
+  const matches = [...text.matchAll(/(?:\bvalor\b(?:\s+(?:de|do|da))?|\br\$)\s*(?:r\$\s*)?([\d.]+(?:,\d{1,2})?|\d+(?:\.\d{1,2})?)/gi)];
+  return parsePositiveValue(matches.at(-1)?.[1]);
+};
+
+const extractDescriptionFromText = (text: string) => {
+  const match = text.match(/(?:^|\s)[-–—]\s*([^\n.!?]+?)\s*$/);
+  return match?.[1]?.trim() || undefined;
+};
+
+const resolvePartnerFromText = (text: string, context: FinanceContext) => {
+  const normalizedText = normalizeComparable(text);
+  return [...context.activePartners]
+    .sort((left, right) => right.name.length - left.name.length)
+    .find((partner) => {
+      const normalizedName = normalizeComparable(partner.name);
+      const index = normalizedText.indexOf(normalizedName);
+      if (index < 0) return false;
+      const before = normalizedText[index - 1];
+      const after = normalizedText[index + normalizedName.length];
+      return (!before || !/[a-z0-9]/i.test(before)) && (!after || !/[a-z0-9]/i.test(after));
+    });
+};
+
+function inferDraftFields(raw: TransactionDraft, text: string, context: FinanceContext, inferredDate?: string): TransactionDraft {
+  const withdrawal = isProfitWithdrawalText(text);
+  const partnerFromText = resolvePartnerFromText(text, context);
+  const inferredValue = extractValueFromText(text);
+  const inferredDescription = extractDescriptionFromText(text);
+  const rawCategory = typeof raw.category === "string" ? raw.category.trim() : "";
+  const rawDescription = typeof raw.description === "string" && raw.description.trim() ? raw.description.trim() : undefined;
+  const rawCategoryIsWithdrawal = ["saque", "saque de lucro", "saque de lucros"].includes(normalizeComparable(rawCategory));
+  const description = withdrawal && inferredDescription
+    ? inferredDescription
+    : rawDescription || (withdrawal && rawCategory && !rawCategoryIsWithdrawal ? rawCategory : undefined);
+
+  return {
+    ...raw,
+    type: withdrawal ? "Saída" : raw.type,
+    category: withdrawal ? "Saque de Lucro" : raw.category,
+    description,
+    value: parsePositiveValue(raw.value) === undefined ? inferredValue : raw.value,
+    date: inferredDate || raw.date,
+    partnerId: partnerFromText?.id || raw.partnerId,
+    partnerName: partnerFromText?.name || raw.partnerName,
+  };
+}
+
 function normalizeDraft(raw: TransactionDraft, context: FinanceContext, inferredDate?: string, allowSimpleDate = true): { draft?: Required<Pick<TransactionDraft, "type" | "category" | "description" | "value" | "date" | "paymentMethod" | "accountType" | "isTransfer">> & Pick<TransactionDraft, "notes" | "partnerId" | "partnerName">; missing: string[]; options: string[] } {
   const normalizedType = normalize(raw.type);
   const type = normalizedType === "entrada" ? "Entrada" : normalizedType === "saída" || normalizedType === "saida" ? "Saída" : undefined;
   const accountType = raw.accountType === "reserve" ? "reserve" : "main";
   const costCategory = findAllowedCategory(raw.category, context.activeCostCategories);
   const expenseCategory = findAllowedCategory(raw.category, context.expenseCategories);
-  const withdrawalAlias = ["saque", "saque de lucro"].includes(normalizeComparable(raw.category));
+  const withdrawalAlias = ["saque", "saque de lucro", "saque de lucros"].includes(normalizeComparable(raw.category));
   const rawHasPartner = Boolean((typeof raw.partnerId === "string" && raw.partnerId.trim()) || (typeof raw.partnerName === "string" && raw.partnerName.trim()));
   const partner = rawHasPartner
     ? context.activePartners.find((item) => item.id === raw.partnerId) || context.activePartners.find((item) => normalizeComparable(item.name) === normalizeComparable(raw.partnerName))
     : undefined;
-  const isProfitWithdrawal = accountType === "main" && type === "Saída" && (withdrawalAlias || (rawHasPartner && Boolean(partner)) || (rawHasPartner && !costCategory && !expenseCategory));
+  const isProfitWithdrawal = accountType === "main" && type === "Saída" && (withdrawalAlias || (!raw.category && rawHasPartner && Boolean(partner)));
   const allowed = accountType === "reserve"
     ? type === "Entrada" ? RESERVE_ENTRY_CATEGORIES : type === "Saída" ? RESERVE_EXPENSE_CATEGORIES : [...RESERVE_ENTRY_CATEGORIES, ...RESERVE_EXPENSE_CATEGORIES]
     : type === "Entrada" ? MAIN_ENTRY_CATEGORIES : type === "Saída" ? ["Saque de Lucro", "Fundo de Caixa", ...context.activeCostCategories, ...context.expenseCategories] : [...MAIN_ENTRY_CATEGORIES, "Saque de Lucro", "Fundo de Caixa", ...context.activeCostCategories, ...context.expenseCategories];
@@ -291,6 +346,7 @@ async function executeDraft(supabase: ReturnType<typeof createClient>, userId: s
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+const sanitizeVisibleMessage = (message: string) => message.replace(/\brascunho(?:s)?\b/gi, "lançamento pronto para confirmação");
 
 function sanitizeChatRequest(input: unknown): ChatRequest {
   if (!isRecord(input)) throw new Error("Pedido inválido.");
@@ -315,8 +371,10 @@ async function askModel(context: FinanceContext, request: ChatRequest, customPro
   if (!apiKey) {
     return { kind: "message", message: "O assistente de IA ainda não está configurado. Um administrador precisa definir OPENROUTER_API_KEY na Edge Function.", categoryOptions: categoryOptions(context) };
   }
+  const userMessages = (request.messages || []).filter((message) => message.role === "user").map((message) => message.content);
   const lastUserMessage = request.message || [...(request.messages || [])].reverse().find((message) => message.role === "user")?.content;
-  const inferredDate = inferDateFromText(lastUserMessage);
+  const userText = [...new Set([...userMessages, ...(lastUserMessage ? [lastUserMessage] : [])])].join("\n");
+  const inferredDate = inferDateFromText(lastUserMessage) || inferDateFromText(userText);
   const client = new OpenAI({
     apiKey,
     baseURL: "https://openrouter.ai/api/v1",
@@ -351,18 +409,20 @@ ${IMMUTABLE_SECURITY_GUARDRAILS}`,
   } catch {
     return { kind: "message", message: "Não consegui estruturar esse pedido. Informe tipo, categoria, valor e data.", categoryOptions: categoryOptions(context) };
   }
-  const normalized = normalizeDraft((parsed.draft || {}) as TransactionDraft, context, inferredDate);
+  const modelDraft = isRecord(parsed.draft) ? parsed.draft as TransactionDraft : {};
+  const inferredDraft = inferDraftFields(modelDraft, userText, context, inferredDate);
+  const normalized = normalizeDraft(inferredDraft, context, inferredDate);
   if (normalized.missing.length > 0) {
     return {
       kind: "message",
-      message: typeof parsed.message === "string" ? parsed.message : `Ainda preciso de: ${normalized.missing.join(", ")}.`,
+      message: `Ainda preciso de: ${normalized.missing.join(", ")}.`,
       missingFields: normalized.missing,
       categoryOptions: normalized.options.length ? normalized.options : categoryOptions(context),
     };
   }
   return {
     kind: "draft",
-    message: typeof parsed.message === "string" ? parsed.message : "Revise o rascunho e confirme para criar o lançamento.",
+    message: sanitizeVisibleMessage(typeof parsed.message === "string" ? parsed.message : "Lançamento pronto para confirmação."),
     draft: normalized.draft,
   };
 }
@@ -387,7 +447,7 @@ Deno.serve(async (request) => {
     if (body.mode === "execute") {
       if (body.confirmed !== true) return jsonResponse({ kind: "error", message: "A confirmação explícita é necessária para executar o lançamento." }, 400);
       const normalized = normalizeDraft(body.draft || {}, context, undefined, false);
-      if (normalized.missing.length || !normalized.draft) return jsonResponse({ kind: "error", message: `Rascunho inválido: ${normalized.missing.join(", ")}.`, categoryOptions: normalized.options }, 400);
+      if (normalized.missing.length || !normalized.draft) return jsonResponse({ kind: "error", message: `Lançamento inválido: ${normalized.missing.join(", ")}.`, categoryOptions: normalized.options }, 400);
       const transactionId = await executeDraft(supabase, user.id, normalized.draft);
       return jsonResponse({ kind: "message", message: "Lançamento confirmado e salvo com segurança.", transactionId });
     }

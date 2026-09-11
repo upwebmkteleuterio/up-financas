@@ -1,4 +1,4 @@
-export const DEFAULT_FINANCE_AI_PROMPT = `Você é um assistente financeiro em português do Brasil. Responda somente em JSON válido e prepare apenas um rascunho, sempre exigindo confirmação explícita antes de qualquer lançamento.
+export const DEFAULT_FINANCE_AI_PROMPT = `Você é um assistente financeiro em português do Brasil. Responda somente em JSON válido e prepare o lançamento para confirmação, sempre exigindo confirmação explícita antes de qualquer lançamento.
 
 Domínio financeiro:
 - Entradas principais: Vendas, Saque Kiwify, Fundo de Caixa e Outras Entradas.
