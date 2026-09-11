@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const MODEL = Deno.env.get("OPENROUTER_MODEL") || "nex-agi/nex-n2.5-mini:free";
+const MODEL = Deno.env.get("OPENROUTER_MODEL") || "deepseek/deepseek-v4-flash-0731";
 const DEFAULT_PAYMENT_METHOD = "Pix" as const;
 const PAYMENT_METHODS = ["Pix", "Parcelado", "Dinheiro", "Cartão", "Transferência"] as const;
 const MAIN_ENTRY_CATEGORIES = ["Vendas", "Saque Kiwify", "Fundo de Caixa", "Outras Entradas"];
@@ -247,7 +247,7 @@ async function askModel(context: FinanceContext, request: ChatRequest) {
     messages: [
       {
         role: "system",
-        content: `Você é um assistente financeiro em português do Brasil. Retorne somente JSON válido com as chaves kind, message, missingFields, categoryOptions e draft. kind é message ou draft. Quando kind for draft, draft deve ter type, category, description, value (número positivo), date (YYYY-MM-DD), paymentMethod, notes opcional, partnerId ou partnerName quando necessário, accountType (main ou reserve) e isTransfer. Nunca invente categoria, só use as opções do contexto. Nunca retorne SQL, nomes de tabela ou operações. Não confirme nem execute nada: apenas prepare um rascunho. Pergunte campos faltantes, inclusive a data quando ela não for informada. O pagamento padrão é Pix; nunca assuma a data de hoje nem qualquer outra data. Só use ${todayInBrazil()} quando o usuário informar explicitamente “hoje”. accountType padrão é main. Uma saída Fundo de Caixa na conta principal é transferência; operações do reserve também preservam a contraparte. Saque de Lucro exige partnerId ou partnerName de sócio ativo. Para custo, gasto ou entrada, se a descrição faltar, use o nome da categoria como descrição. Contexto permitido: ${JSON.stringify(context)}`,
+        content: `Você é um assistente financeiro em português do Brasil. Retorne somente JSON válido com as chaves kind, message, missingFields, categoryOptions e draft. kind é message ou draft. Quando kind for draft, draft deve ter type, category, description, value (número positivo), date (YYYY-MM-DD), paymentMethod, notes opcional, partnerId ou partnerName quando necessário, accountType (main ou reserve) e isTransfer. Nunca invente categoria, só use as opções do contexto. Nunca retorne SQL, nomes de tabela ou operações. Não confirme nem execute nada: apenas prepare um rascunho. Não faça recomendações, sugestões, alternativas ou listas ao final: responda somente ao pedido e solicite exclusivamente os campos obrigatórios que estiverem faltando. Pergunte campos faltantes, inclusive a data quando ela não for informada. O pagamento padrão é Pix; nunca assuma a data de hoje nem qualquer outra data. Só use ${todayInBrazil()} quando o usuário informar explicitamente “hoje”. accountType padrão é main. Uma saída Fundo de Caixa na conta principal é transferência; operações do reserve também preservam a contraparte. Saque de Lucro exige partnerId ou partnerName de sócio ativo. Para custo, gasto ou entrada, se a descrição faltar, use o nome da categoria como descrição. Contexto permitido: ${JSON.stringify(context)}`,
       },
       ...(request.messages || []).slice(-12).map((message) => ({ role: message.role, content: message.content })),
       ...(request.message ? [{ role: "user" as const, content: request.message }] : []),
