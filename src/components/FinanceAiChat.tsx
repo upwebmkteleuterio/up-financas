@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Mic, MicOff, Pencil } from "lucide-react";
+import { Check, Mic, MicOff, Pencil, Trash2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { dispatchTransactionCreated } from "@/lib/transaction-events";
@@ -76,7 +76,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
   const queryClient = useQueryClient();
   const [messages, setMessages] = useState<AiChatMessage[]>([initialMessage]);
   const [input, setInput] = useState("");
-  const [draft, setDraft] = useState<AiTransactionDraft | null>(null);
+  const [drafts, setDrafts] = useState<AiTransactionDraft[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryMessage, setRetryMessage] = useState<string | null>(null);
@@ -139,7 +139,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
   const invokeChat = useCallback(async (
     mode: "chat" | "execute",
     text?: string,
-    draftToExecute?: AiTransactionDraft,
+    draftsToExecute?: AiTransactionDraft[],
     conversation: AiChatMessage[] = messages,
   ) => {
     if (isLoadingRef.current) return;
@@ -157,7 +157,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
             delete serverMessage.timestamp;
             return serverMessage;
           }),
-          draft: draftToExecute,
+          drafts: draftsToExecute,
           confirmed: mode === "execute",
           diagnostics: true,
         },
@@ -196,8 +196,18 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
       }
       if (mode === "execute") {
         await queryClient.invalidateQueries({ queryKey: ["transactions"] });
-        if (typeof data.transactionId === "string") dispatchTransactionCreated(data.transactionId);
-        showSuccess("Lançamento realizado com sucesso!");
+        const transactionIds = Array.isArray(data.transactionIds)
+          ? data.transactionIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+          : typeof data.transactionId === "string"
+            ? [data.transactionId]
+            : [];
+        if (transactionIds.length > 0) dispatchTransactionCreated(transactionIds);
+        const createdCount = typeof data.createdCount === "number" && Number.isFinite(data.createdCount)
+          ? Math.max(0, Math.floor(data.createdCount))
+          : transactionIds.length;
+        showSuccess(createdCount === 1
+          ? "Lançamento realizado com sucesso!"
+          : `${createdCount} lançamentos realizados com sucesso!`);
       }
       setMessages((current) => [...current, {
         id: `assistant-${messageIdRef.current++}`,
@@ -208,7 +218,8 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
         diagnostics: data.diagnostics,
         requestId: data.requestId,
       }]);
-      setDraft(data.draft ? formatDraftField(data.draft) : null);
+      const responseDrafts = data.drafts ?? (data.draft ? [data.draft] : []);
+      setDrafts(mode === "execute" ? [] : responseDrafts.map(formatDraftField));
     } catch (caught) {
       if (caught instanceof Error && caught.name === "FinanceAiChatTimeout" && mode === "chat") {
         setError(null);
@@ -221,7 +232,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
       isLoadingRef.current = false;
       setIsLoading(false);
     }
-  }, [draft, messages, queryClient]);
+  }, [messages, queryClient]);
 
   const stopVoiceRecognitionForSend = () => {
     clearPauseTimer();
@@ -393,14 +404,19 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     }
   };
 
-  const confirmDraft = async () => {
-    if (!draft || isLoadingRef.current) return;
-    await invokeChat("execute", undefined, draft);
+  const confirmDrafts = async () => {
+    if (drafts.length === 0 || isLoadingRef.current) return;
+    await invokeChat("execute", undefined, drafts);
   };
 
-  const requestChange = () => {
-    setInput("Quero alterar este lançamento: ");
+  const requestChange = (itemIndex: number) => {
+    setInput(`Quero alterar o lançamento ${itemIndex + 1}: `);
     inputRef.current?.focus();
+  };
+
+  const removeDraft = (itemIndex: number) => {
+    if (isLoadingRef.current) return;
+    setDrafts((current) => current.filter((_, index) => index !== itemIndex));
   };
 
   const handleSettingsOpenChange = (open: boolean) => {
@@ -440,19 +456,34 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     }
   };
 
-  const draftCard = draft && (
+  const draftCard = drafts.length > 0 && (
     <Card className="border-emerald-300/20 bg-white/[0.07] text-slate-100 shadow-xl shadow-black/20 backdrop-blur-md">
-      <CardHeader className="pb-2"><CardTitle className="text-base text-white">Confirme o lançamento</CardTitle></CardHeader>
-      <CardContent className="space-y-1 text-sm">
-        <p><strong>{draft.type}</strong> · {draft.category}</p>
-        <p className="text-lg font-semibold text-emerald-300">{formatCurrency(draft.value)}</p>
-        <p>{draft.description}</p>
-        <p className="text-slate-400">{draft.date} · {draft.paymentMethod}{draft.partnerName ? ` · ${draft.partnerName}` : ""}</p>
-        {draft.notes && <p className="text-slate-400">Obs.: {draft.notes}</p>}
-        <div className="mt-3 flex gap-2">
-          <Button type="button" size="sm" onClick={confirmDraft} disabled={isLoading} className="bg-emerald-400 text-emerald-950 hover:bg-emerald-300"><Check className="mr-1 h-4 w-4" />Confirmar</Button>
-          <Button type="button" size="sm" variant="outline" onClick={requestChange} disabled={isLoading} className="border-white/15 bg-transparent text-slate-200 hover:bg-white/10 hover:text-white"><Pencil className="mr-1 h-4 w-4" />Alterar</Button>
-        </div>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base text-white">
+          {drafts.length === 1 ? "Confirme o lançamento" : "Confirme os lançamentos"}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        {drafts.map((draftItem, itemIndex) => (
+          <Card key={`${draftItem.date}-${draftItem.description}-${itemIndex}`} className="border-white/10 bg-black/10 text-slate-100">
+            <CardContent className="space-y-1 p-3">
+              <p><strong>{draftItem.type}</strong> · {draftItem.category}</p>
+              <p className="text-lg font-semibold text-emerald-300">{formatCurrency(draftItem.value)}</p>
+              <p>{draftItem.description}</p>
+              <p className="text-slate-400">Data: {draftItem.date} · Pagamento: {draftItem.paymentMethod}</p>
+              <p className="text-slate-400">Parceiro: {draftItem.partnerName || "Não informado"}</p>
+              {draftItem.notes && <p className="text-slate-400">Obs.: {draftItem.notes}</p>}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={() => requestChange(itemIndex)} disabled={isLoading} className="border-white/15 bg-transparent text-slate-200 hover:bg-white/10 hover:text-white"><Pencil className="mr-1 h-4 w-4" />Alterar</Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => removeDraft(itemIndex)} disabled={isLoading} className="border-red-300/20 bg-transparent text-red-200 hover:bg-red-300/10 hover:text-red-100"><Trash2 className="mr-1 h-4 w-4" />Remover</Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        <Button type="button" onClick={confirmDrafts} disabled={isLoading} className="w-full bg-emerald-400 text-emerald-950 hover:bg-emerald-300">
+          <Check className="mr-1 h-4 w-4" />
+          {drafts.length === 1 ? "Confirmar lançamento" : `Confirmar ${drafts.length} lançamentos`}
+        </Button>
       </CardContent>
     </Card>
   );

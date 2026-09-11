@@ -32,9 +32,16 @@ export type ChatRequest = {
   mode?: "chat" | "execute";
   message?: string;
   messages?: Array<{ role: "user" | "assistant"; content: string }>;
+  drafts?: TransactionDraft[];
   draft?: TransactionDraft;
   confirmed?: boolean;
   diagnostics?: boolean;
+};
+
+export type MissingByItem = {
+  index: number;
+  label: string;
+  missingFields: string[];
 };
 
 export type FinanceContext = {
@@ -64,8 +71,9 @@ export type ModelResponse = {
   kind: "message" | "proposal" | "missing";
   message?: string;
   missingFields?: string[];
+  missingByItem?: MissingByItem[];
   categoryOptions?: string[];
-  draft?: TransactionDraft;
+  drafts?: TransactionDraft[];
 };
 
 export type ModelToolCall = {

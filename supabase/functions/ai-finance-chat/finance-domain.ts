@@ -120,9 +120,8 @@ export function normalizeDraft(raw: TransactionDraft, context: FinanceContext, a
   };
 }
 
-export async function executeDraft(supabase: Supabase, userId: string, draft: NormalizedDraft) {
-  const payload = {
-    user_id: userId,
+function transactionPayload(draft: NormalizedDraft): Record<string, unknown> {
+  return {
     type: draft.type,
     category: draft.category,
     description: draft.description,
@@ -134,27 +133,34 @@ export async function executeDraft(supabase: Supabase, userId: string, draft: No
     account_type: draft.accountType,
     is_transfer: draft.isTransfer,
     is_automated: false,
+    created_source: "ai",
   };
-  const { data, error } = await supabase.from("transactions").insert(payload).select("id").single();
-  if (error || !data) throw new Error("Não foi possível criar o lançamento principal.");
+}
 
-  if (draft.isTransfer) {
-    let counterpart: Record<string, unknown> | null = null;
-    if (draft.accountType === "main" && draft.type === "Saída" && draft.category === "Fundo de Caixa") {
-      counterpart = { ...payload, account_type: "reserve", type: "Entrada", category: "Aporte Fundo", description: `Aporte vindo da Conta Principal: ${draft.description}`, payment_method: "Transferência" };
-    } else if (draft.accountType === "reserve" && draft.type === "Saída" && draft.category === "Resgate Fundo") {
-      counterpart = { ...payload, account_type: "main", type: "Entrada", category: "Fundo de Caixa", description: `Resgate vindo do Fundo de Caixa: ${draft.description}`, payment_method: "Transferência" };
-    } else if (draft.accountType === "reserve" && draft.type === "Entrada" && draft.category === "Aporte Fundo") {
-      counterpart = { ...payload, account_type: "main", type: "Saída", category: "Fundo de Caixa", description: `Aporte para Fundo de Caixa: ${draft.description}`, payment_method: "Transferência" };
-    }
-    if (counterpart) {
-      const { error: counterpartError } = await supabase.from("transactions").insert(counterpart);
-      if (counterpartError) {
-        const { error: rollbackError } = await supabase.from("transactions").delete().eq("id", data.id).eq("user_id", userId);
-        if (rollbackError) throw new Error("A contraparte do Fundo de Caixa falhou e não foi possível desfazer o lançamento principal.");
-        throw new Error("A contraparte do Fundo de Caixa falhou; o lançamento principal foi desfeito.");
-      }
-    }
+function counterpartPayload(draft: NormalizedDraft, payload: Record<string, unknown>): Record<string, unknown> | null {
+  if (draft.accountType === "main" && draft.type === "Saída" && draft.category === "Fundo de Caixa") {
+    return { ...payload, account_type: "reserve", type: "Entrada", category: "Aporte Fundo", description: `Aporte vindo da Conta Principal: ${draft.description}`, payment_method: "Transferência" };
   }
-  return data.id;
+  if (draft.accountType === "reserve" && draft.type === "Saída" && draft.category === "Resgate Fundo") {
+    return { ...payload, account_type: "main", type: "Entrada", category: "Fundo de Caixa", description: `Resgate vindo do Fundo de Caixa: ${draft.description}`, payment_method: "Transferência" };
+  }
+  if (draft.accountType === "reserve" && draft.type === "Entrada" && draft.category === "Aporte Fundo") {
+    return { ...payload, account_type: "main", type: "Saída", category: "Fundo de Caixa", description: `Aporte para Fundo de Caixa: ${draft.description}`, payment_method: "Transferência" };
+  }
+  return null;
+}
+
+export async function executeDraft(supabase: Supabase, drafts: NormalizedDraft[]): Promise<string[]> {
+  const payloads = drafts.flatMap((draft) => {
+    const payload = transactionPayload(draft);
+    const counterpart = draft.isTransfer ? counterpartPayload(draft, payload) : null;
+    return counterpart ? [payload, counterpart] : [payload];
+  });
+  if (payloads.length < 1 || payloads.length > 50) throw new Error("A operação em lote excede o limite permitido.");
+
+  const { data, error } = await supabase.rpc("create_ai_transaction_batch", { p_transactions: payloads });
+  if (error || !Array.isArray(data) || !data.every((id): id is string => typeof id === "string")) {
+    throw new Error("Não foi possível criar os lançamentos.");
+  }
+  return data;
 }

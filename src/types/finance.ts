@@ -30,6 +30,7 @@ export interface Transaction {
   notes?: string;
   partnerId?: string;
   isAutomated?: boolean; // Novo campo para identificar transações automáticas
+  createdSource?: "manual" | "ai" | "pdf" | "system";
   sourceContractId?: string; // ID do contrato de origem
   accountType?: AccountType; // main ou reserve
   isTransfer?: boolean; // identifica se é transferência entre contas

@@ -46,14 +46,24 @@ export interface AiDiagnostics {
   stages: AiDiagnosticStage[];
 }
 
+export interface AiMissingByItem {
+  index: number;
+  label: string;
+  missingFields: string[];
+}
+
 export interface AiChatResponse {
   kind: "message" | "proposal" | "missing" | "error";
   message: string;
   requestId?: string;
   diagnostics?: AiDiagnostics;
   missingFields?: string[];
+  missingByItem?: AiMissingByItem[];
   categoryOptions?: string[];
   draft?: AiTransactionDraft;
+  drafts?: AiTransactionDraft[];
   transactionId?: string;
+  transactionIds?: string[];
+  createdCount?: number;
   activities?: AiToolActivity[];
 }

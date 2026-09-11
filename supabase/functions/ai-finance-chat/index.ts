@@ -63,13 +63,41 @@ Deno.serve(async (request) => {
         recordStage(diagnostics, "validation", "error", validationStartedAt);
         return finish({ kind: "error", message: "A confirmação explícita é necessária para executar o lançamento." }, 400, "error");
       }
-      const normalized = normalizeDraft(body.draft || {}, context, false);
-      recordStage(diagnostics, "validation", normalized.missing.length || !normalized.draft ? "error" : "ok", validationStartedAt);
-      if (normalized.missing.length || !normalized.draft) {
-        return finish({ kind: "error", message: `Lançamento inválido: ${normalized.missing.join(", ")}.`, categoryOptions: normalized.options }, 400, "error");
+      const requestedDrafts = body.drafts?.length ? body.drafts : body.draft ? [body.draft] : [];
+      if (requestedDrafts.length === 0) {
+        recordStage(diagnostics, "validation", "error", validationStartedAt);
+        return finish({ kind: "error", message: "É necessário informar pelo menos um lançamento." }, 400, "error");
       }
-      const transactionId = await executeDraft(supabase, user.id, normalized.draft);
-      return finish({ kind: "message", message: "Lançamento confirmado e salvo com segurança.", transactionId, activities: [] });
+      const normalizedDrafts = requestedDrafts.map((draft) => normalizeDraft(draft, context, false));
+      const invalidItems = normalizedDrafts
+        .map((normalized, index) => ({
+          index,
+          label: typeof requestedDrafts[index].description === "string" && requestedDrafts[index].description.trim()
+            ? requestedDrafts[index].description.trim()
+            : typeof requestedDrafts[index].category === "string" && requestedDrafts[index].category.trim()
+              ? requestedDrafts[index].category.trim()
+              : `Item ${index + 1}`,
+          missingFields: normalized.missing,
+        }))
+        .filter((item) => item.missingFields.length > 0);
+      recordStage(diagnostics, "validation", invalidItems.length > 0 ? "error" : "ok", validationStartedAt);
+      if (invalidItems.length > 0) {
+        return finish({
+          kind: "error",
+          message: "Um ou mais lançamentos são inválidos ou estão incompletos.",
+          missingByItem: invalidItems,
+          categoryOptions: [...new Set(normalizedDrafts.flatMap((normalized) => normalized.options))],
+        }, 400, "error");
+      }
+      const transactionIds = await executeDraft(supabase, normalizedDrafts.map((normalized) => normalized.draft!));
+      return finish({
+        kind: "message",
+        message: "Lançamentos confirmados e salvos com segurança.",
+        transactionIds,
+        transactionId: transactionIds[0],
+        createdCount: normalizedDrafts.length,
+        activities: [],
+      });
     }
 
     const result = await askModel(supabase, user.id, context, body, customPrompt, requestId, diagnostics);

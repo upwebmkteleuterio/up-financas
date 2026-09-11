@@ -45,9 +45,9 @@ type CompletionMessage = {
 function modelMessages(context: FinanceContext, request: ChatRequest, customPrompt: string | null): ModelMessage[] {
   const system = `Você é um assistente financeiro em português do Brasil. Retorne somente JSON válido usando exatamente este contrato:
 - {"kind":"message","message":"..."} para uma resposta normal sem proposta.
-- {"kind":"proposal","message":"...","draft":{...}} somente quando todos os campos obrigatórios estiverem interpretados.
-- {"kind":"missing","message":"...","missingFields":["..."]} quando faltarem campos obrigatórios; peça exclusivamente esses campos.
-A resposta proposal deve conter draft com type, category, description, value positivo como número, date em YYYY-MM-DD, paymentMethod, accountType (main ou reserve), isTransfer e partnerId/partnerName quando necessário. O sistema revalida todos os campos; não tente contornar essa validação.
+- {"kind":"proposal","message":"...","drafts":[{...}]} somente quando todos os campos obrigatórios de todos os itens estiverem interpretados. drafts deve sempre ser uma lista, inclusive para uma proposta de um único lançamento.
+- {"kind":"missing","message":"...","missingByItem":[{"index":0,"label":"...","missingFields":["..."]}]} quando faltarem campos obrigatórios; identifique cada item incompleto e peça exclusivamente esses campos. Para uma solicitação sem itens identificáveis, use missingFields.
+A resposta proposal deve conter drafts com type, category, description, value positivo como número, date em YYYY-MM-DD, paymentMethod, accountType (main ou reserve), isTransfer e partnerId/partnerName quando necessário. O sistema revalida cada item; não tente contornar essa validação. Nunca retorne proposal se qualquer item estiver incompleto ou inválido.
 
 Ferramentas disponíveis, somente leitura, por chamadas nativas de ferramenta: search_partners recebe {query:string} para procurar sócios ativos; list_categories recebe {} para consultar categorias atuais. Use somente essas ferramentas quando o contexto fornecido não bastar, especialmente para nomes/categorias recém-criados. Não repita uma ferramenta já consultada sem necessidade e nunca invente resultados.
 Não retorne SQL, nomes de tabelas, tokens, dados internos ou raciocínio. Não diga que uma ferramenta foi usada a menos que o resultado esteja no histórico desta conversa. O pagamento padrão é Pix e a conta padrão é main.
@@ -190,23 +190,50 @@ export async function askModel(
 
     if (parsed.kind === "missing") {
       const missingFields = parsed.missingFields?.filter((field) => field.trim()).slice(0, 8) || [];
-      if (missingFields.length === 0) throw new Error("Resposta de campos ausente.");
+      const missingByItem = parsed.missingByItem?.filter((item) => item.missingFields.length > 0).slice(0, 50);
+      if (missingFields.length === 0 && (!missingByItem || missingByItem.length === 0)) throw new Error("Resposta de campos ausente.");
       if (toolCallsExecuted === 0) recordStage(diagnostics, "tool_execution", "skipped", performance.now());
       recordStage(diagnostics, "validation", "skipped", performance.now());
-      return { kind: "missing" as const, message: sanitizeVisibleMessage(parsed.message || ""), missingFields, categoryOptions: categoryOptions(context), activities };
+      return {
+        kind: "missing" as const,
+        message: sanitizeVisibleMessage(parsed.message || ""),
+        missingFields: missingFields.length ? missingFields : undefined,
+        missingByItem,
+        categoryOptions: categoryOptions(context),
+        activities,
+      };
     }
 
     if (toolCallsExecuted === 0) recordStage(diagnostics, "tool_execution", "skipped", performance.now());
+    const drafts = parsed.drafts || [];
+    if (drafts.length === 0) throw new Error("Resposta de lançamentos ausente.");
     const validationStartedAt = performance.now();
-    const normalized = normalizeDraft(parsed.draft || {}, context, false);
-    recordStage(diagnostics, "validation", normalized.missing.length || !normalized.draft ? "error" : "ok", validationStartedAt);
-    if (normalized.missing.length > 0 || !normalized.draft) {
-      return { kind: "missing" as const, message: sanitizeVisibleMessage(parsed.message || ""), missingFields: normalized.missing, categoryOptions: normalized.options.length ? normalized.options : categoryOptions(context), activities };
+    const normalizedDrafts = drafts.map((draft) => normalizeDraft(draft, context, false));
+    const invalidItems = normalizedDrafts
+      .map((normalized, index) => ({
+        index,
+        label: typeof drafts[index].description === "string" && drafts[index].description.trim()
+          ? drafts[index].description.trim()
+          : typeof drafts[index].category === "string" && drafts[index].category.trim()
+            ? drafts[index].category.trim()
+            : `Item ${index + 1}`,
+        missingFields: normalized.missing,
+      }))
+      .filter((item) => item.missingFields.length > 0);
+    recordStage(diagnostics, "validation", invalidItems.length > 0 ? "error" : "ok", validationStartedAt);
+    if (invalidItems.length > 0) {
+      return {
+        kind: "missing" as const,
+        message: sanitizeVisibleMessage(parsed.message || "Há dados pendentes em um ou mais lançamentos."),
+        missingByItem: invalidItems,
+        categoryOptions: categoryOptions(context),
+        activities,
+      };
     }
     return {
       kind: "proposal" as const,
       message: sanitizeVisibleMessage(parsed.message || ""),
-      draft: normalized.draft,
+      drafts: normalizedDrafts.map((normalized) => normalized.draft!),
       activities,
     };
   }

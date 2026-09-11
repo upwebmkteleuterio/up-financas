@@ -6,7 +6,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useFinance, useInfiniteTransactions } from "@/hooks/use-finance";
 import { Transaction, TransactionType } from "@/types/finance";
 import { cn, createLocalDateFromISO } from "@/lib/utils";
-import { useQueryClient } from "@tanstack/react-query";
 import { TRANSACTION_CREATED_EVENT, type TransactionCreatedDetail } from "@/lib/transaction-events";
 import { ArrowDown, ArrowUp, DollarSign, Trash2, Pencil, Loader2, Plus, Wallet, FileText } from "lucide-react";
 import TransactionFormDialog from "@/components/TransactionFormDialog";
@@ -221,7 +220,6 @@ const Financeiro = () => {
   const { getPartnerNameById } = usePartners();
   const { costCategories } = useCosts();
   const isMobile = useIsMobile();
-  const queryClient = useQueryClient();
   
   const [activeTab, setActiveTab] = useState<"Todos" | TransactionType | "Saque de Lucro" | "Fundo de Caixa">("Todos");
   const [dateFilter, setDateFilter] = useState<FilterPeriod>(`month_${new Date().getMonth()}` as FilterPeriod);
@@ -229,7 +227,7 @@ const Financeiro = () => {
     start: undefined,
     end: undefined,
   });
-  const [highlightedTransactionId, setHighlightedTransactionId] = useState<string | null>(null);
+  const [highlightedTransactionIds, setHighlightedTransactionIds] = useState<Set<string>>(new Set());
   const highlightTimeoutRef = useRef<number | null>(null);
   
   const costCategoryNames = useMemo(() => costCategories.map(c => c.name), [costCategories]);
@@ -283,15 +281,19 @@ const Financeiro = () => {
   useEffect(() => {
     const handleTransactionCreated = (event: Event) => {
       const detail = (event as CustomEvent<TransactionCreatedDetail>).detail;
-      if (!detail || typeof detail.id !== "string") return;
+      const ids = Array.isArray(detail?.ids)
+        ? detail.ids.filter((id): id is string => typeof id === "string" && id.length > 0)
+        : typeof detail?.id === "string" && detail.id.length > 0
+          ? [detail.id]
+          : [];
+      if (ids.length === 0) return;
 
-      setHighlightedTransactionId(detail.id);
+      setHighlightedTransactionIds(new Set(ids));
       if (highlightTimeoutRef.current !== null) window.clearTimeout(highlightTimeoutRef.current);
       highlightTimeoutRef.current = window.setTimeout(() => {
-        setHighlightedTransactionId(null);
+        setHighlightedTransactionIds(new Set());
         highlightTimeoutRef.current = null;
       }, 4000);
-      void queryClient.invalidateQueries({ queryKey: ["transactions"] });
     };
 
     window.addEventListener(TRANSACTION_CREATED_EVENT, handleTransactionCreated);
@@ -299,7 +301,7 @@ const Financeiro = () => {
       window.removeEventListener(TRANSACTION_CREATED_EVENT, handleTransactionCreated);
       if (highlightTimeoutRef.current !== null) window.clearTimeout(highlightTimeoutRef.current);
     };
-  }, [queryClient]);
+  }, []);
 
   const fabSaidaTrigger = (
     <FloatingActionButton 
@@ -388,7 +390,7 @@ const Financeiro = () => {
                       {groupedTransactions.map((group) => (
                         <React.Fragment key={group.date}>
                             <div className="px-4 py-2 bg-transparent text-sm font-semibold sticky top-[100px] lg:top-[76px] z-10 border-b border-border" style={{ color: '#52667a' }}>{group.date}</div>
-                            {group.transactions.map((t) => <TransactionItem key={t.id} transaction={t} onDelete={deleteTransaction} onEdit={updateTransaction} getPartnerNameById={getPartnerNameById} isHighlighted={t.id === highlightedTransactionId} />)}
+                            {group.transactions.map((t) => <TransactionItem key={t.id} transaction={t} onDelete={deleteTransaction} onEdit={updateTransaction} getPartnerNameById={getPartnerNameById} isHighlighted={highlightedTransactionIds.has(t.id)} />)}
                         </React.Fragment>
                       ))}
                       {hasMore && (
