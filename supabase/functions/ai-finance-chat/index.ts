@@ -251,7 +251,12 @@ async function askModel(context: FinanceContext, request: ChatRequest, customPro
   if (!apiKey) {
     return { kind: "message", message: "O assistente de IA ainda não está configurado. Um administrador precisa definir OPENROUTER_API_KEY na Edge Function.", categoryOptions: categoryOptions(context) };
   }
-  const client = new OpenAI({ apiKey, baseURL: "https://openrouter.ai/api/v1" });
+  const client = new OpenAI({
+    apiKey,
+    baseURL: "https://openrouter.ai/api/v1",
+    timeout: 13_000,
+    maxRetries: 0,
+  });
   const completion = await client.chat.completions.create({
     model: MODEL,
     temperature: 0.1,
@@ -317,6 +322,7 @@ Deno.serve(async (request) => {
     const customPrompt = await loadCustomSystemPrompt(supabase, user.id);
     return jsonResponse(await askModel(context, body, customPrompt));
   } catch (error) {
+    console.error("[ai-finance-chat] request failed", error instanceof Error ? error.name : "unknown error");
     return jsonResponse({ kind: "error", message: error instanceof Error ? error.message : "Não foi possível processar o pedido." }, 400);
   }
 });

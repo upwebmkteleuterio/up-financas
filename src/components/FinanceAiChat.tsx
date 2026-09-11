@@ -37,11 +37,6 @@ interface SpeechRecognitionLike {
   stop: () => void;
 }
 
-export interface SpeechTranscriptSegment {
-  id: string;
-  text: string;
-}
-
 type SpeechResult = Pick<SpeechRecognitionResultItem, "transcript" | "isFinal">;
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
@@ -56,9 +51,13 @@ interface FinanceAiChatProps {
 }
 
 const initialMessage: AiChatMessage = {
+  id: "finance-ai-initial",
   role: "assistant",
   content: "Olá! Posso preparar um lançamento de entrada, saída ou fundo de caixa. O lançamento só será criado depois da sua confirmação.",
 };
+
+const CHAT_TIMEOUT_MESSAGE = "Desculpe, algo deu errado. Tente novamente.";
+const CHAT_TIMEOUT_MS = 15_000;
 
 const formatCurrency = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -75,6 +74,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
   const [draft, setDraft] = useState<AiTransactionDraft | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryMessage, setRetryMessage] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [speechMessage, setSpeechMessage] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -84,8 +84,6 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
   const [isPromptSaving, setIsPromptSaving] = useState(false);
   const [promptStatus, setPromptStatus] = useState<string | null>(null);
   const [promptError, setPromptError] = useState<string | null>(null);
-  const [confirmedVoiceSegments, setConfirmedVoiceSegments] = useState<SpeechTranscriptSegment[]>([]);
-  const [interimVoiceSegment, setInterimVoiceSegment] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const isLoadingRef = useRef(false);
@@ -94,7 +92,8 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
   const forcedFinalIndexesRef = useRef(new Set<number>());
   const punctuatedIndexesRef = useRef(new Set<number>());
   const voiceBaseInputRef = useRef("");
-  const voiceSessionRef = useRef(0);
+  const messageIdRef = useRef(0);
+  const lastSentMessageRef = useRef<string | null>(null);
 
   useEffect(() => () => {
     if (pauseTimerRef.current !== null) window.clearTimeout(pauseTimerRef.current);
@@ -142,8 +141,9 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     isLoadingRef.current = true;
     setIsLoading(true);
     setError(null);
+    setRetryMessage(null);
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke<AiChatResponse>("ai-finance-chat", {
+      const invokePromise = supabase.functions.invoke<AiChatResponse>("ai-finance-chat", {
         body: {
           mode,
           message: text,
@@ -152,29 +152,88 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
           confirmed: mode === "execute",
         },
       });
+      let result;
+      if (mode === "chat") {
+        let timeoutId: number | undefined;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutId = window.setTimeout(() => {
+            const timeoutError = new Error("A chamada do chat excedeu o tempo limite.");
+            timeoutError.name = "FinanceAiChatTimeout";
+            reject(timeoutError);
+          }, CHAT_TIMEOUT_MS);
+        });
+        try {
+          result = await Promise.race([invokePromise, timeoutPromise]);
+        } finally {
+          if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+        }
+      } else {
+        result = await invokePromise;
+      }
+      const { data, error: invokeError } = result;
       if (invokeError) throw invokeError;
       if (!data) throw new Error("A IA não retornou uma resposta.");
       if (data.kind === "error") throw new Error(data.message);
-      setMessages((current) => [...current, { role: "assistant", content: data.message }]);
+      setMessages((current) => [...current, {
+        id: `assistant-${messageIdRef.current++}`,
+        role: "assistant",
+        content: data.message,
+      }]);
       setDraft(data.draft ? formatDraftField(data.draft) : mode === "execute" || Boolean(text) ? null : draft);
       if (mode === "execute") setDraft(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Não foi possível falar com a IA.");
+      if (caught instanceof Error && caught.name === "FinanceAiChatTimeout" && mode === "chat") {
+        setError(null);
+        setRetryMessage(CHAT_TIMEOUT_MESSAGE);
+      } else {
+        setRetryMessage(null);
+        setError(caught instanceof Error ? caught.message : "Não foi possível falar com a IA.");
+      }
     } finally {
       isLoadingRef.current = false;
       setIsLoading(false);
     }
   }, [draft, messages]);
 
+  const stopVoiceRecognitionForSend = () => {
+    clearPauseTimer();
+    const recognition = recognitionRef.current;
+    if (recognition) {
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+      recognitionRef.current = null;
+      recognition.stop();
+    }
+    speechResultsRef.current.clear();
+    forcedFinalIndexesRef.current.clear();
+    punctuatedIndexesRef.current.clear();
+    voiceBaseInputRef.current = "";
+    setIsRecording(false);
+    setSpeechMessage(null);
+  };
+
   const sendMessage = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (recognitionRef.current) stopVoiceRecognitionForSend();
     const text = input.trim();
     if (!text || isLoadingRef.current) return;
-    const userMessage: AiChatMessage = { role: "user", content: text };
+    const userMessage: AiChatMessage = {
+      id: `user-${messageIdRef.current++}`,
+      role: "user",
+      content: text,
+    };
     const conversation = [...messages, userMessage];
+    lastSentMessageRef.current = text;
     setInput("");
     setMessages(conversation);
     await invokeChat("chat", text, undefined, conversation);
+  };
+
+  const retryLastMessage = async () => {
+    const text = lastSentMessageRef.current;
+    if (!text || isLoadingRef.current) return;
+    await invokeChat("chat", text, undefined, messages);
   };
 
   const clearPauseTimer = () => {
@@ -190,25 +249,20 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     return `${trimmedText}.`;
   };
 
-  const updateVoicePreview = () => {
+  const updateVoiceInput = () => {
     const entries = Array.from(speechResultsRef.current.entries()).sort(([left], [right]) => left - right);
     const confirmed = entries
       .filter(([index, result]) => result.isFinal || forcedFinalIndexesRef.current.has(index))
-      .map(([index, result]) => ({
-        id: `voice-${voiceSessionRef.current}-${index}`,
-        text: punctuatedIndexesRef.current.has(index) ? addAutomaticPeriod(result.transcript) : result.transcript.trim(),
-      }))
-      .filter((segment) => segment.text);
+      .map(([index, result]) => punctuatedIndexesRef.current.has(index) ? addAutomaticPeriod(result.transcript) : result.transcript.trim())
+      .filter(Boolean);
     const interim = entries
       .filter(([index, result]) => !result.isFinal && !forcedFinalIndexesRef.current.has(index))
       .map(([, result]) => result.transcript.trim())
       .filter(Boolean)
-      .join(" ") || null;
-    const transcript = [...confirmed.map((segment) => segment.text), interim].filter(Boolean).join(" ");
+      .join(" ");
+    const transcript = [...confirmed, interim].filter(Boolean).join(" ");
     const nextInput = [voiceBaseInputRef.current, transcript].filter(Boolean).join(" ");
 
-    setConfirmedVoiceSegments(confirmed);
-    setInterimVoiceSegment(interim);
     setInput(nextInput);
   };
 
@@ -218,7 +272,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     const latest = entries.at(-1);
     if (pending) forcedFinalIndexesRef.current.add(pending[0]);
     if (latest) punctuatedIndexesRef.current.add(latest[0]);
-    updateVoicePreview();
+    updateVoiceInput();
   };
 
   const scheduleSpeechPause = () => {
@@ -238,10 +292,10 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
       activeRecognition.onresult = null;
       activeRecognition.onerror = null;
       activeRecognition.onend = null;
+      recognitionRef.current = null;
+      activeRecognition.stop();
     }
-    recognitionRef.current = null;
     setIsRecording(false);
-    if (activeRecognition && activeRecognition !== recognition) activeRecognition.stop();
   };
 
   const startRecording = () => {
@@ -256,20 +310,16 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
         finalizePendingSpeech();
         finishRecording(recognition, false);
         setSpeechMessage("Transcrição pronta. Revise o texto antes de enviar.");
-        recognition.stop();
       } else {
         setIsRecording(false);
       }
       return;
     }
 
-    voiceSessionRef.current += 1;
     speechResultsRef.current.clear();
     forcedFinalIndexesRef.current.clear();
     punctuatedIndexesRef.current.clear();
     voiceBaseInputRef.current = input.trim();
-    setConfirmedVoiceSegments([]);
-    setInterimVoiceSegment(null);
 
     const recognition = new SpeechRecognition();
     recognition.lang = "pt-BR";
@@ -289,7 +339,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
         }
         speechResultsRef.current.set(index, { transcript: item.transcript, isFinal: item.isFinal });
       }
-      updateVoicePreview();
+      updateVoiceInput();
       setSpeechMessage("Ouvindo em português (Brasil)…");
       scheduleSpeechPause();
     };
@@ -387,8 +437,8 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
         isRecording={isRecording}
         error={error}
         speechMessage={speechMessage}
-        confirmedVoiceSegments={confirmedVoiceSegments}
-        interimVoiceSegment={interimVoiceSegment}
+        retryMessage={retryMessage}
+        onRetry={retryLastMessage}
         draft={draftCard}
         inputRef={inputRef}
         onInputChange={setInput}
