@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const MODEL = Deno.env.get("OPENROUTER_MODEL") || "deepseek/deepseek-v4-flash-0731";
+const MODEL = Deno.env.get("OPENROUTER_MODEL") || "nex-agi/nex-n2.5-mini:free";
 const DEFAULT_PAYMENT_METHOD = "Pix" as const;
 const PAYMENT_METHODS = ["Pix", "Parcelado", "Dinheiro", "Cartão", "Transferência"] as const;
 const MAIN_ENTRY_CATEGORIES = ["Vendas", "Saque Kiwify", "Fundo de Caixa", "Outras Entradas"];
@@ -316,8 +316,8 @@ Deno.serve(async (request) => {
       if (body.confirmed !== true) return jsonResponse({ kind: "error", message: "A confirmação explícita é necessária para executar o lançamento." }, 400);
       const normalized = normalizeDraft(body.draft || {}, context);
       if (normalized.missing.length || !normalized.draft) return jsonResponse({ kind: "error", message: `Rascunho inválido: ${normalized.missing.join(", ")}.`, categoryOptions: normalized.options }, 400);
-      await executeDraft(supabase, user.id, normalized.draft);
-      return jsonResponse({ kind: "message", message: "Lançamento confirmado e salvo com segurança." });
+      const transactionId = await executeDraft(supabase, user.id, normalized.draft);
+      return jsonResponse({ kind: "message", message: "Lançamento confirmado e salvo com segurança.", transactionId });
     }
     const customPrompt = await loadCustomSystemPrompt(supabase, user.id);
     return jsonResponse(await askModel(context, body, customPrompt));

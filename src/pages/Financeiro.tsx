@@ -6,6 +6,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useFinance, useInfiniteTransactions } from "@/hooks/use-finance";
 import { Transaction, TransactionType } from "@/types/finance";
 import { cn, createLocalDateFromISO } from "@/lib/utils";
+import { useQueryClient } from "@tanstack/react-query";
+import { TRANSACTION_CREATED_EVENT, type TransactionCreatedDetail } from "@/lib/transaction-events";
 import { ArrowDown, ArrowUp, DollarSign, Trash2, Pencil, Loader2, Plus, Wallet, FileText } from "lucide-react";
 import TransactionFormDialog from "@/components/TransactionFormDialog";
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
@@ -119,9 +121,10 @@ interface TransactionItemProps {
   onDelete: (id: string) => void;
   onEdit: (updatedTransaction: Transaction) => void;
   getPartnerNameById: (id: string) => string | undefined;
+  isHighlighted: boolean;
 }
 
-const TransactionItem: React.FC<TransactionItemProps> = ({ transaction, onDelete, onEdit, getPartnerNameById }) => {
+const TransactionItem: React.FC<TransactionItemProps> = ({ transaction, onDelete, onEdit, getPartnerNameById, isHighlighted }) => {
   const isEntry = transaction.type === "Entrada";
   const isSaqueLucro = transaction.category === "Saque de Lucro";
   const isFundoCaixa = transaction.category === "Fundo de Caixa" || transaction.isTransfer;
@@ -162,7 +165,7 @@ const TransactionItem: React.FC<TransactionItemProps> = ({ transaction, onDelete
 
   return (
     <NotesTooltip notes={transaction.notes || ""}>
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border-b border-sidebar-border hover:bg-sidebar-accent/30 transition-colors group">
+        <div className={cn("flex flex-col md:flex-row justify-between items-start md:items-center p-4 border-b border-sidebar-border hover:bg-sidebar-accent/30 transition-colors group", isHighlighted && "transaction-created-highlight")}>
           
           <div className="flex items-center space-x-4 flex-1 min-w-0 w-full md:w-auto">
             <TransactionIcon
@@ -218,6 +221,7 @@ const Financeiro = () => {
   const { getPartnerNameById } = usePartners();
   const { costCategories } = useCosts();
   const isMobile = useIsMobile();
+  const queryClient = useQueryClient();
   
   const [activeTab, setActiveTab] = useState<"Todos" | TransactionType | "Saque de Lucro" | "Fundo de Caixa">("Todos");
   const [dateFilter, setDateFilter] = useState<FilterPeriod>(`month_${new Date().getMonth()}` as FilterPeriod);
@@ -225,6 +229,8 @@ const Financeiro = () => {
     start: undefined,
     end: undefined,
   });
+  const [highlightedTransactionId, setHighlightedTransactionId] = useState<string | null>(null);
+  const highlightTimeoutRef = useRef<number | null>(null);
   
   const costCategoryNames = useMemo(() => costCategories.map(c => c.name), [costCategories]);
 
@@ -273,6 +279,27 @@ const Financeiro = () => {
 
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    const handleTransactionCreated = (event: Event) => {
+      const detail = (event as CustomEvent<TransactionCreatedDetail>).detail;
+      if (!detail || typeof detail.id !== "string") return;
+
+      setHighlightedTransactionId(detail.id);
+      if (highlightTimeoutRef.current !== null) window.clearTimeout(highlightTimeoutRef.current);
+      highlightTimeoutRef.current = window.setTimeout(() => {
+        setHighlightedTransactionId(null);
+        highlightTimeoutRef.current = null;
+      }, 4000);
+      void queryClient.invalidateQueries({ queryKey: ["transactions"] });
+    };
+
+    window.addEventListener(TRANSACTION_CREATED_EVENT, handleTransactionCreated);
+    return () => {
+      window.removeEventListener(TRANSACTION_CREATED_EVENT, handleTransactionCreated);
+      if (highlightTimeoutRef.current !== null) window.clearTimeout(highlightTimeoutRef.current);
+    };
+  }, [queryClient]);
 
   const fabSaidaTrigger = (
     <FloatingActionButton 
@@ -361,7 +388,7 @@ const Financeiro = () => {
                       {groupedTransactions.map((group) => (
                         <React.Fragment key={group.date}>
                             <div className="px-4 py-2 bg-transparent text-sm font-semibold sticky top-[100px] lg:top-[76px] z-10 border-b border-border" style={{ color: '#52667a' }}>{group.date}</div>
-                            {group.transactions.map((t) => <TransactionItem key={t.id} transaction={t} onDelete={deleteTransaction} onEdit={updateTransaction} getPartnerNameById={getPartnerNameById} />)}
+                            {group.transactions.map((t) => <TransactionItem key={t.id} transaction={t} onDelete={deleteTransaction} onEdit={updateTransaction} getPartnerNameById={getPartnerNameById} isHighlighted={t.id === highlightedTransactionId} />)}
                         </React.Fragment>
                       ))}
                       {hasMore && (

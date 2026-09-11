@@ -26,4 +26,5 @@ export interface AiChatResponse {
   missingFields?: string[];
   categoryOptions?: string[];
   draft?: AiTransactionDraft;
+  transactionId?: string;
 }

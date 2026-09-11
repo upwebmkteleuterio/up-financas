@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Mic, MicOff, Pencil } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { dispatchTransactionCreated } from "@/lib/transaction-events";
+import { showSuccess } from "@/utils/toast";
 import { DEFAULT_FINANCE_AI_PROMPT } from "@/lib/finance-ai-prompt";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -69,6 +72,7 @@ const formatDraftField = (draft: AiTransactionDraft) => ({
 });
 
 const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
+  const queryClient = useQueryClient();
   const [messages, setMessages] = useState<AiChatMessage[]>([initialMessage]);
   const [input, setInput] = useState("");
   const [draft, setDraft] = useState<AiTransactionDraft | null>(null);
@@ -174,6 +178,11 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
       if (invokeError) throw invokeError;
       if (!data) throw new Error("A IA não retornou uma resposta.");
       if (data.kind === "error") throw new Error(data.message);
+      if (mode === "execute") {
+        await queryClient.invalidateQueries({ queryKey: ["transactions"] });
+        if (typeof data.transactionId === "string") dispatchTransactionCreated(data.transactionId);
+        showSuccess("Lançamento realizado com sucesso!");
+      }
       setMessages((current) => [...current, {
         id: `assistant-${messageIdRef.current++}`,
         role: "assistant",
@@ -193,7 +202,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
       isLoadingRef.current = false;
       setIsLoading(false);
     }
-  }, [draft, messages]);
+  }, [draft, messages, queryClient]);
 
   const stopVoiceRecognitionForSend = () => {
     clearPauseTimer();

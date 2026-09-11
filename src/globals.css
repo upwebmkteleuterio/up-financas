@@ -120,6 +120,21 @@
   }
 }
 
+@keyframes transaction-created-highlight {
+  0% {
+    background-color: rgba(16, 185, 129, 0.16);
+    box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.5), 0 0 24px rgba(20, 184, 166, 0.22);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: inset 0 0 0 1px transparent, 0 0 0 rgba(20, 184, 166, 0);
+  }
+}
+
+.transaction-created-highlight {
+  animation: transaction-created-highlight 4s ease-out;
+}
+
 @layer base {
   * {
     @apply border-border;

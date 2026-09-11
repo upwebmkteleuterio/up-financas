@@ -13,6 +13,7 @@ import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { keysToCamelCase, createLocalDateFromISO, keysToSnakeCase } from "@/lib/utils";
 import { showSuccess, showError } from "@/utils/toast";
+import { dispatchTransactionCreated } from "@/lib/transaction-events";
 
 const TABLE_NAME = "transactions";
 const QUERY_KEY = [TABLE_NAME];
@@ -298,6 +299,8 @@ export function useFinance() {
                 await insertMutation.mutateAsync({ ...counterpart, isTransfer: true } as any);
             }
         }
+
+        dispatchTransactionCreated(insertedData.id);
 
         // 4. Sucesso! (O aviso showSuccess já é disparado pelo hook useSupabaseMutation se eu não tivesse sobrescrevido,
         // mas aqui eu uso o showSuccess manual para garantir a mensagem correta)
