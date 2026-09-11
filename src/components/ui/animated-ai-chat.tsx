@@ -1,11 +1,30 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUp, CheckCircle2, ListChecks, Mic, MicOff, Search, Settings, X, type LucideIcon } from "lucide-react";
+import {
+  Activity,
+  AlertCircle,
+  ArrowUp,
+  CheckCircle2,
+  ChevronDown,
+  CircleSlash2,
+  Cpu,
+  GitBranch,
+  ListChecks,
+  MessageSquareText,
+  Mic,
+  MicOff,
+  Search,
+  Settings,
+  ShieldCheck,
+  Wrench,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { ThinkingOrb } from "@/components/ui/thinking-orbs";
-import type { AiChatMessage, AiToolActivity } from "@/types/finance-ai";
+import type { AiChatMessage, AiDiagnosticStage, AiDiagnostics, AiToolActivity } from "@/types/finance-ai";
 
 interface AnimatedAiChatProps {
   messages: AiChatMessage[];
@@ -48,6 +67,111 @@ const getActivityDetails = (activity: AiToolActivity) => {
   };
 };
 
+const diagnosticStageNames: readonly AiDiagnosticStage["stage"][] = [
+  "context",
+  "model_request",
+  "follow_up",
+  "tool_execution",
+  "validation",
+  "response",
+];
+
+const diagnosticStatuses: readonly AiDiagnosticStage["status"][] = ["ok", "skipped", "error"];
+
+const diagnosticDetails: Record<AiDiagnosticStage["stage"], { label: string; Icon: LucideIcon }> = {
+  context: { label: "Contexto", Icon: GitBranch },
+  model_request: { label: "Solicitação ao modelo", Icon: Cpu },
+  follow_up: { label: "Acompanhamento", Icon: MessageSquareText },
+  tool_execution: { label: "Execução de ferramenta", Icon: Wrench },
+  validation: { label: "Validação", Icon: ShieldCheck },
+  response: { label: "Resposta", Icon: Activity },
+};
+
+const diagnosticStatusDetails: Record<AiDiagnosticStage["status"], { label: string; className: string; Icon: LucideIcon }> = {
+  ok: { label: "Concluído", className: "text-emerald-300", Icon: CheckCircle2 },
+  skipped: { label: "Ignorado", className: "text-slate-400", Icon: CircleSlash2 },
+  error: { label: "Falhou", className: "text-red-300", Icon: AlertCircle },
+};
+
+const isDiagnosticStageName = (value: unknown): value is AiDiagnosticStage["stage"] =>
+  typeof value === "string" && diagnosticStageNames.includes(value as AiDiagnosticStage["stage"]);
+
+const isDiagnosticStatus = (value: unknown): value is AiDiagnosticStage["status"] =>
+  typeof value === "string" && diagnosticStatuses.includes(value as AiDiagnosticStage["status"]);
+
+const getSafeDiagnostics = (diagnostics?: AiDiagnostics): AiDiagnostics | undefined => {
+  const rawStages: unknown[] = Array.isArray(diagnostics?.stages) ? diagnostics.stages : [];
+  const stages = rawStages.flatMap((rawStage) => {
+    if (!rawStage || typeof rawStage !== "object") return [];
+    const stage = rawStage as Record<string, unknown>;
+    if (!isDiagnosticStageName(stage.stage) || !isDiagnosticStatus(stage.status) || typeof stage.durationMs !== "number" || !Number.isFinite(stage.durationMs)) return [];
+    const code = typeof stage.code === "string" && /^[A-Z0-9_]{1,64}$/.test(stage.code) ? stage.code : undefined;
+    return [{
+      stage: stage.stage,
+      status: stage.status,
+      code,
+      durationMs: Math.max(0, Math.min(Math.round(stage.durationMs), 3_600_000)),
+    }];
+  });
+  return stages.length > 0 ? { stages } : undefined;
+};
+
+const getSafeRequestId = (requestId?: string) => {
+  if (typeof requestId !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(requestId)) return null;
+  return requestId;
+};
+
+const formatDiagnosticDuration = (durationMs: number) =>
+  durationMs < 1000 ? `${durationMs} ms` : `${(durationMs / 1000).toFixed(1).replace(".", ",")} s`;
+
+const formatMessageTime = (timestamp?: string) => {
+  if (!timestamp) return null;
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", hour12: false });
+};
+
+const DiagnosticPanel: React.FC<{ diagnostics?: AiDiagnostics; requestId?: string }> = ({ diagnostics, requestId }) => {
+  const safeDiagnostics = getSafeDiagnostics(diagnostics);
+  if (!safeDiagnostics) return null;
+  const safeRequestId = getSafeRequestId(requestId);
+
+  return (
+    <details className="group overflow-hidden rounded-lg border border-sky-300/15 bg-sky-300/[0.04] text-xs" aria-label="Diagnóstico da execução">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 font-medium text-sky-100 outline-none transition-colors hover:bg-sky-300/[0.05] focus-visible:ring-2 focus-visible:ring-sky-300/50 [&::-webkit-details-marker]:hidden">
+        <span className="flex min-w-0 items-center gap-2">
+          <Activity className="h-3.5 w-3.5 shrink-0 text-sky-300" aria-hidden="true" />
+          <span>Diagnóstico da execução</span>
+        </span>
+        <ChevronDown className="h-4 w-4 shrink-0 text-sky-300 transition-transform group-open:rotate-180" aria-hidden="true" />
+      </summary>
+      <div className="space-y-1.5 border-t border-sky-300/10 px-3 py-2.5">
+        {safeDiagnostics.stages.map((stage, stageIndex) => {
+          const details = diagnosticDetails[stage.stage];
+          const status = diagnosticStatusDetails[stage.status];
+          return (
+            <div key={`${stage.stage}-${stageIndex}`} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 overflow-hidden rounded-md border border-white/[0.06] bg-black/10 px-2 py-1.5">
+              <details.Icon className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+              <span className="min-w-0 flex-1 basis-32 text-slate-300">{details.label}</span>
+              {stage.code && <code className="max-w-full break-all text-[10px] text-slate-500">{stage.code}</code>}
+              <span className="shrink-0 text-slate-500">{formatDiagnosticDuration(stage.durationMs)}</span>
+              <span className={`flex shrink-0 items-center gap-1 ${status.className}`}>
+                <status.Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                {status.label}
+              </span>
+            </div>
+          );
+        })}
+        {safeRequestId && (
+          <p className="border-t border-white/[0.06] pt-2 text-[11px] text-slate-500">
+            ID de suporte: <code className="break-all font-mono text-slate-400">{safeRequestId}</code>
+          </p>
+        )}
+      </div>
+    </details>
+  );
+};
+
 const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
   messages,
   input,
@@ -67,6 +191,8 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
 }) => {
   const fallbackInputRef = useRef<HTMLTextAreaElement | null>(null);
   const textareaRef = inputRef || fallbackInputRef;
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const hasDraft = Boolean(draft);
   const [thinkingIndex, setThinkingIndex] = useState(0);
 
   useEffect(() => {
@@ -86,6 +212,18 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
     }, 3000);
     return () => window.clearInterval(interval);
   }, [isLoading]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const root = scrollAreaRef.current;
+      if (!root) return;
+      const viewport = root.matches("[data-radix-scroll-area-viewport]")
+        ? root
+        : root.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]");
+      viewport?.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [messages, isLoading, retryMessage, hasDraft]);
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
@@ -119,10 +257,12 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
         </div>
       </header>
 
-      <ScrollArea className="relative z-10 min-h-0 flex-1 px-4 py-5">
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
+      <ScrollArea ref={scrollAreaRef} className="relative z-10 min-h-0 flex-1 overflow-x-hidden px-4 py-5">
+        <div className="mx-auto flex w-full max-w-4xl flex-col gap-3">
           <AnimatePresence initial={false}>
-            {messages.map((message, index) => (
+            {messages.map((message, index) => {
+              const messageTime = formatMessageTime(message.timestamp);
+              return (
               <motion.div
                 key={message.id || `${message.role}-${message.content}-${index}`}
                 initial={{ opacity: 0, y: 10, scale: 0.98 }}
@@ -156,10 +296,18 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
                       );
                     })}
                     <p>{message.content}</p>
+                    <DiagnosticPanel diagnostics={message.diagnostics} requestId={message.requestId} />
+                    {messageTime && <time dateTime={message.timestamp} className="block text-right text-[10px] leading-4 text-slate-500">{messageTime}</time>}
                   </div>
-                ) : message.content}
+                ) : (
+                  <div className="flex flex-col">
+                    <p>{message.content}</p>
+                    {messageTime && <time dateTime={message.timestamp} className="mt-1 self-end text-[10px] leading-4 text-emerald-100/60">{messageTime}</time>}
+                  </div>
+                )}
               </motion.div>
-            ))}
+              );
+            })}
 
             {isLoading && (
               <motion.div
@@ -215,7 +363,7 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
       </ScrollArea>
 
       <div className="relative z-10 border-t border-white/[0.08] bg-black/10 p-4 backdrop-blur-xl">
-        <div className="mx-auto w-full max-w-2xl">
+        <div className="mx-auto w-full max-w-4xl">
           {error && <p role="alert" className="mb-2 px-1 text-xs text-red-300">{error}</p>}
           {speechMessage && <p className="mb-2 px-1 text-xs text-slate-400">{speechMessage}</p>}
           <form onSubmit={onSubmit} className="rounded-2xl border border-white/[0.12] bg-white/[0.06] p-2 shadow-2xl shadow-black/20 backdrop-blur-xl">

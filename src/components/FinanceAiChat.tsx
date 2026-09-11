@@ -57,10 +57,11 @@ const initialMessage: AiChatMessage = {
   id: "finance-ai-initial",
   role: "assistant",
   content: "Olá! Posso preparar um lançamento de entrada, saída ou fundo de caixa. O lançamento só será criado depois da sua confirmação.",
+  timestamp: new Date().toISOString(),
 };
 
 const CHAT_TIMEOUT_MESSAGE = "Desculpe, algo deu errado. Tente novamente.";
-const CHAT_TIMEOUT_MS = 15_000;
+const CHAT_TIMEOUT_MS = 45_000;
 
 const formatCurrency = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -151,9 +152,14 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
         body: {
           mode,
           message: text,
-          messages: conversation,
+          messages: conversation.map((message) => {
+            const serverMessage = { ...message };
+            delete serverMessage.timestamp;
+            return serverMessage;
+          }),
           draft: draftToExecute,
           confirmed: mode === "execute",
+          diagnostics: true,
         },
       });
       let result;
@@ -177,7 +183,17 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
       const { data, error: invokeError } = result;
       if (invokeError) throw invokeError;
       if (!data) throw new Error("A IA não retornou uma resposta.");
-      if (data.kind === "error") throw new Error(data.message);
+      if (data.kind === "error") {
+        setMessages((current) => [...current, {
+          id: `assistant-${messageIdRef.current++}`,
+          role: "assistant",
+          content: data.message,
+          timestamp: new Date().toISOString(),
+          diagnostics: data.diagnostics,
+          requestId: data.requestId,
+        }]);
+        throw new Error(data.message);
+      }
       if (mode === "execute") {
         await queryClient.invalidateQueries({ queryKey: ["transactions"] });
         if (typeof data.transactionId === "string") dispatchTransactionCreated(data.transactionId);
@@ -187,7 +203,10 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
         id: `assistant-${messageIdRef.current++}`,
         role: "assistant",
         content: data.message,
+        timestamp: new Date().toISOString(),
         activities: data.activities,
+        diagnostics: data.diagnostics,
+        requestId: data.requestId,
       }]);
       setDraft(data.draft ? formatDraftField(data.draft) : null);
     } catch (caught) {
@@ -231,6 +250,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
       id: `user-${messageIdRef.current++}`,
       role: "user",
       content: text,
+      timestamp: new Date().toISOString(),
     };
     const conversation = [...messages, userMessage];
     lastSentMessageRef.current = text;

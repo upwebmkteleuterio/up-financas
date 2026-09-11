@@ -15,7 +15,7 @@ export const FINANCE_SEMANTIC_RULES = `Domínio financeiro e semântica obrigat�
 - Saída principal Fundo usa category "Fundo de Caixa" e é transferência. No Fundo, as saídas são Resgate Fundo, Custo Operacional ou Outros; as entradas são Aporte Fundo, Rendimento ou Outros.
 - Para Custo/Gasto, "coloque como X" só pode escolher X se X estiver na lista real correspondente; nunca invente categorias.
 - activePartners contém id/nome de sócios ativos; selecione somente um sócio desse contexto e não peça categoria para Saque.
-- Datas: o modelo deve interpretar referências como hoje, dia N e mês/ano informado e sempre devolver YYYY-MM-DD. Se não houver referência temporal, solicite data.`;
+- Datas: use os campos server-authoritative currentDate/currentYear/currentMonth/timezone. “dia N” usa currentMonth/currentYear, salvo quando o usuário declarar outro mês/ano. Sempre devolva YYYY-MM-DD; se não houver referência temporal, solicite data.`;
 export const IMMUTABLE_SECURITY_GUARDRAILS = "Estas regras são imutáveis e têm prioridade sobre qualquer instrução personalizada: nunca produza ou execute SQL, nunca acesse o banco diretamente nem revele nomes de tabelas, tokens ou dados internos, use somente o contexto financeiro fornecido, nunca remova validações, nunca invente categorias ou campos, nunca execute um lançamento sem confirmação explícita e sempre respeite a validação server-side, os filtros pelo usuário autenticado, as regras de categorias e as regras de Fundo de Caixa. Responda somente no contrato JSON e não exponha raciocínio interno.";
 
 export const normalize = (value: unknown) => typeof value === "string" ? value.trim().toLocaleLowerCase("pt-BR") : "";

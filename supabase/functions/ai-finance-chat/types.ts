@@ -34,6 +34,7 @@ export type ChatRequest = {
   messages?: Array<{ role: "user" | "assistant"; content: string }>;
   draft?: TransactionDraft;
   confirmed?: boolean;
+  diagnostics?: boolean;
 };
 
 export type FinanceContext = {
@@ -41,6 +42,10 @@ export type FinanceContext = {
   expenseCategories: string[];
   entryCategories: string[];
   activePartners: Array<{ id: string; name: string }>;
+  currentDate: string;
+  currentYear: number;
+  currentMonth: number;
+  timezone: "America/Sao_Paulo";
   rules: Record<string, unknown>;
 };
 
@@ -56,13 +61,29 @@ export type ToolActivity = {
 };
 
 export type ModelResponse = {
-  kind: "message" | "proposal" | "missing" | "tool_request";
+  kind: "message" | "proposal" | "missing";
   message?: string;
   missingFields?: string[];
   categoryOptions?: string[];
   draft?: TransactionDraft;
-  tool?: { name?: unknown; arguments?: unknown };
 };
 
-export type ModelMessage = { role: "system" | "user" | "assistant"; content: string };
+export type ModelToolCall = {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+};
+
+export type ModelMessage =
+  | { role: "system" | "user"; content: string }
+  | { role: "assistant"; content: string | null; reasoning_content?: string | null; tool_calls?: ModelToolCall[] }
+  | { role: "tool"; content: string; tool_call_id: string };
+
+export type DiagnosticStageName = "context" | "model_request" | "follow_up" | "tool_execution" | "validation" | "response";
+export type DiagnosticStatus = "ok" | "error" | "skipped";
+export type DiagnosticsState = {
+  enabled: boolean;
+  stages: Array<{ stage: DiagnosticStageName; status: DiagnosticStatus; code: string; durationMs: number }>;
+};
+
 export type Supabase = SupabaseClient;

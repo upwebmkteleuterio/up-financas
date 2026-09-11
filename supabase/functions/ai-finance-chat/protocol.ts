@@ -16,6 +16,7 @@ export function sanitizeChatRequest(input: unknown): ChatRequest {
     messages,
     draft: isRecord(input.draft) ? input.draft as TransactionDraft : undefined,
     confirmed: input.confirmed === true,
+    diagnostics: input.diagnostics === true,
   };
 }
 
@@ -24,14 +25,13 @@ export function parseModelResponse(content: string): ModelResponse | null {
     const parsed: unknown = JSON.parse(content.replace(/^```json\s*|\s*```$/g, ""));
     if (!isRecord(parsed)) return null;
     const kind = parsed.kind;
-    if (kind !== "message" && kind !== "proposal" && kind !== "missing" && kind !== "tool_request") return null;
+    if (kind !== "message" && kind !== "proposal" && kind !== "missing") return null;
     return {
       kind,
       message: typeof parsed.message === "string" ? parsed.message : undefined,
       missingFields: Array.isArray(parsed.missingFields) ? parsed.missingFields.filter((field): field is string => typeof field === "string").slice(0, 8) : undefined,
       categoryOptions: Array.isArray(parsed.categoryOptions) ? parsed.categoryOptions.filter((option): option is string => typeof option === "string").slice(0, 50) : undefined,
       draft: isRecord(parsed.draft) ? parsed.draft as TransactionDraft : undefined,
-      tool: isRecord(parsed.tool) ? { name: parsed.tool.name, arguments: parsed.tool.arguments } : undefined,
     };
   } catch {
     return null;
