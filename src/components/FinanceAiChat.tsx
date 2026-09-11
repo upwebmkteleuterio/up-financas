@@ -187,9 +187,9 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
         id: `assistant-${messageIdRef.current++}`,
         role: "assistant",
         content: data.message,
+        activities: data.activities,
       }]);
-      setDraft(data.draft ? formatDraftField(data.draft) : mode === "execute" || Boolean(text) ? null : draft);
-      if (mode === "execute") setDraft(null);
+      setDraft(data.draft ? formatDraftField(data.draft) : null);
     } catch (caught) {
       if (caught instanceof Error && caught.name === "FinanceAiChatTimeout" && mode === "chat") {
         setError(null);

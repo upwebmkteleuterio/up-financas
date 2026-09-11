@@ -18,13 +18,26 @@ export interface AiChatMessage {
   id?: string;
   role: "user" | "assistant";
   content: string;
+  activities?: AiToolActivity[];
+}
+
+export interface AiToolActivity {
+  tool: "search_partners" | "list_categories";
+  label: string;
+  result: {
+    count: number;
+    candidates?: Array<{ id: string; name: string }>;
+    costCategories?: string[];
+    expenseCategories?: string[];
+  };
 }
 
 export interface AiChatResponse {
-  kind: "message" | "draft" | "error";
+  kind: "message" | "proposal" | "missing" | "error";
   message: string;
   missingFields?: string[];
   categoryOptions?: string[];
   draft?: AiTransactionDraft;
   transactionId?: string;
+  activities?: AiToolActivity[];
 }

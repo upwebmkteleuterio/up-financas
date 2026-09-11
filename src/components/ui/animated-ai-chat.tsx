@@ -1,11 +1,11 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUp, Mic, MicOff, Settings, X } from "lucide-react";
+import { ArrowUp, CheckCircle2, ListChecks, Mic, MicOff, Search, Settings, X, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { ThinkingOrb } from "@/components/ui/thinking-orbs";
-import type { AiChatMessage } from "@/types/finance-ai";
+import type { AiChatMessage, AiToolActivity } from "@/types/finance-ai";
 
 interface AnimatedAiChatProps {
   messages: AiChatMessage[];
@@ -34,6 +34,19 @@ const thinkingStatuses = [
 ] as const;
 
 const thinkingOrbStates = ["searching", "connecting", "solving", "composing", "breathing"] as const;
+
+const activityDetails: Record<AiToolActivity["tool"], { fallbackLabel: string; Icon: LucideIcon }> = {
+  search_partners: { fallbackLabel: "Consultei sócios ativos", Icon: Search },
+  list_categories: { fallbackLabel: "Consultei categorias ativas", Icon: ListChecks },
+};
+
+const getActivityDetails = (activity: AiToolActivity) => {
+  const details = activityDetails[activity.tool];
+  return {
+    label: activity.label?.trim() || details.fallbackLabel,
+    Icon: details.Icon,
+  };
+};
 
 const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
   messages,
@@ -121,7 +134,30 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
                     : "ml-auto max-w-[88%] border-emerald-300/10 bg-gradient-to-br from-emerald-500/25 to-teal-400/10 text-emerald-50"
                 }`}
               >
-                {message.content}
+                {message.role === "assistant" ? (
+                  <div className="space-y-2">
+                    {message.activities?.map((activity, activityIndex) => {
+                      const { label, Icon } = getActivityDetails(activity);
+                      return (
+                        <div
+                          key={`${message.id || index}-activity-${activityIndex}`}
+                          className="flex items-center justify-between gap-3 rounded-lg border border-emerald-300/15 bg-black/10 px-3 py-2 text-xs"
+                          aria-label={`${label} concluído`}
+                        >
+                          <div className="flex min-w-0 items-center gap-2 text-slate-300">
+                            <Icon className="h-3.5 w-3.5 shrink-0 text-emerald-300" aria-hidden="true" />
+                            <span className="truncate">{label}</span>
+                          </div>
+                          <span className="flex shrink-0 items-center gap-1 text-emerald-300">
+                            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                            Concluído
+                          </span>
+                        </div>
+                      );
+                    })}
+                    <p>{message.content}</p>
+                  </div>
+                ) : message.content}
               </motion.div>
             ))}
 
