@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+export type DraftSubgroup = "Entrada" | "Custo" | "Gasto" | "Saque" | "Fundo";
+
 export type TransactionDraft = {
   type?: string;
   category?: string;
@@ -12,6 +14,7 @@ export type TransactionDraft = {
   partnerName?: string;
   accountType?: string;
   isTransfer?: boolean;
+  subgroup?: string;
 };
 
 export type NormalizedDraft = {
@@ -26,6 +29,7 @@ export type NormalizedDraft = {
   partnerName?: string;
   accountType: "main" | "reserve";
   isTransfer: boolean;
+  subgroup: DraftSubgroup;
 };
 
 export type ChatRequest = {

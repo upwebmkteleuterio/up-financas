@@ -1,5 +1,7 @@
 import type { AccountType, PaymentMethod, TransactionType } from "@/types/finance";
 
+export type AiDraftSubgroup = "Entrada" | "Custo" | "Gasto" | "Saque" | "Fundo";
+
 export interface AiTransactionDraft {
   type: TransactionType;
   category: string;
@@ -12,6 +14,7 @@ export interface AiTransactionDraft {
   partnerName?: string;
   accountType: AccountType;
   isTransfer: boolean;
+  subgroup: AiDraftSubgroup;
 }
 
 export interface AiChatMessage {

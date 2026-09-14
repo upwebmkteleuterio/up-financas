@@ -23,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import { TextReveal } from "@/components/ui/text-reveal";
 import { ThinkingOrb } from "@/components/ui/thinking-orbs";
 import type { AiChatMessage, AiDiagnosticStage, AiDiagnostics, AiToolActivity } from "@/types/finance-ai";
 
@@ -366,6 +367,12 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
         <div className="mx-auto w-full max-w-4xl">
           {error && <p role="alert" className="mb-2 px-1 text-xs text-red-300">{error}</p>}
           {speechMessage && <p className="mb-2 px-1 text-xs text-slate-400">{speechMessage}</p>}
+          {isRecording && input.trim() && (
+            <TextReveal
+              text={input}
+              className="mb-2 rounded-xl border border-emerald-300/15 bg-emerald-300/[0.06] px-3 py-2 text-sm leading-6 text-emerald-50"
+            />
+          )}
           <form onSubmit={onSubmit} className="rounded-2xl border border-white/[0.12] bg-white/[0.06] p-2 shadow-2xl shadow-black/20 backdrop-blur-xl">
             <Textarea
               ref={textareaRef}

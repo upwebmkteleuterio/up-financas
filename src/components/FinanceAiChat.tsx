@@ -72,6 +72,18 @@ const formatDraftField = (draft: AiTransactionDraft) => ({
   notes: draft.notes || "",
 });
 
+const getDraftSubgroup = (draft: AiTransactionDraft) => {
+  if (draft.subgroup) return draft.subgroup;
+  if (draft.type === "Entrada") return "Entrada" as const;
+  if (draft.accountType === "reserve") return "Fundo" as const;
+  if (draft.category === "Saque de Lucro") return "Saque" as const;
+  if (draft.category === "Fundo de Caixa") return "Fundo" as const;
+  return "Gasto" as const;
+};
+
+const getDraftGroupLabel = (draft: AiTransactionDraft) =>
+  getDraftSubgroup(draft) === "Fundo" && draft.accountType === "reserve" ? "Fundo de Caixa" : getDraftSubgroup(draft);
+
 const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
   const queryClient = useQueryClient();
   const [messages, setMessages] = useState<AiChatMessage[]>([initialMessage]);
@@ -94,8 +106,6 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
   const isLoadingRef = useRef(false);
   const pauseTimerRef = useRef<number | null>(null);
   const speechResultsRef = useRef<Map<number, SpeechResult>>(new Map());
-  const forcedFinalIndexesRef = useRef(new Set<number>());
-  const punctuatedIndexesRef = useRef(new Set<number>());
   const voiceBaseInputRef = useRef("");
   const messageIdRef = useRef(0);
   const lastSentMessageRef = useRef<string | null>(null);
@@ -243,6 +253,8 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
 
   const stopVoiceRecognitionForSend = () => {
     clearPauseTimer();
+    const finalInput = getVoiceInput(true);
+    setInput(finalInput);
     const recognition = recognitionRef.current;
     if (recognition) {
       recognition.onresult = null;
@@ -252,17 +264,16 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
       recognition.stop();
     }
     speechResultsRef.current.clear();
-    forcedFinalIndexesRef.current.clear();
-    punctuatedIndexesRef.current.clear();
     voiceBaseInputRef.current = "";
     setIsRecording(false);
     setSpeechMessage(null);
+    return finalInput;
   };
 
   const sendMessage = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (recognitionRef.current) stopVoiceRecognitionForSend();
-    const text = input.trim();
+    const textSource = recognitionRef.current ? stopVoiceRecognitionForSend() : input;
+    const text = textSource.trim();
     if (!text || isLoadingRef.current) return;
     const userMessage: AiChatMessage = {
       id: `user-${messageIdRef.current++}`,
@@ -297,44 +308,43 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     return `${trimmedText}.`;
   };
 
-  const updateVoiceInput = () => {
-    const entries = Array.from(speechResultsRef.current.entries()).sort(([left], [right]) => left - right);
-    const confirmed = entries
-      .filter(([index, result]) => result.isFinal || forcedFinalIndexesRef.current.has(index))
-      .map(([index, result]) => punctuatedIndexesRef.current.has(index) ? addAutomaticPeriod(result.transcript) : result.transcript.trim())
-      .filter(Boolean);
-    const interim = entries
-      .filter(([index, result]) => !result.isFinal && !forcedFinalIndexesRef.current.has(index))
+  const normalizeVoiceTranscript = (text: string) => text
+    .replace(/(^|[^\p{L}])descrição\b\s*:*\s*/giu, "$1Descrição: ")
+    .replace(/(^|[^\p{L}])categoria\b\s*:*\s*/giu, "$1Categoria: ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  const getVoiceInput = (punctuate: boolean) => {
+    const transcript = Array.from(speechResultsRef.current.entries())
+      .sort(([left], [right]) => left - right)
       .map(([, result]) => result.transcript.trim())
       .filter(Boolean)
       .join(" ");
-    const transcript = [...confirmed, interim].filter(Boolean).join(" ");
-    const nextInput = [voiceBaseInputRef.current, transcript].filter(Boolean).join(" ");
-
-    setInput(nextInput);
+    const normalizedTranscript = normalizeVoiceTranscript(transcript);
+    const finalTranscript = punctuate ? addAutomaticPeriod(normalizedTranscript) : normalizedTranscript;
+    return [voiceBaseInputRef.current, finalTranscript].filter(Boolean).join(" ");
   };
 
-  const finalizePendingSpeech = () => {
-    const entries = Array.from(speechResultsRef.current.entries()).sort(([left], [right]) => left - right);
-    const pending = [...entries].reverse().find(([index, result]) => !result.isFinal && !forcedFinalIndexesRef.current.has(index));
-    const latest = entries.at(-1);
-    if (pending) forcedFinalIndexesRef.current.add(pending[0]);
-    if (latest) punctuatedIndexesRef.current.add(latest[0]);
-    updateVoiceInput();
+  const updateVoiceInput = (punctuate = false) => {
+    setInput(getVoiceInput(punctuate));
+  };
+
+  const finalizeVoiceTranscript = (punctuate = true) => {
+    updateVoiceInput(punctuate);
   };
 
   const scheduleSpeechPause = () => {
     clearPauseTimer();
     pauseTimerRef.current = window.setTimeout(() => {
       pauseTimerRef.current = null;
-      finalizePendingSpeech();
+      updateVoiceInput();
     }, 1000);
   };
 
   const finishRecording = (recognition: SpeechRecognitionLike | null, finalize: boolean) => {
     if (recognition && recognitionRef.current !== recognition) return;
     clearPauseTimer();
-    if (finalize) finalizePendingSpeech();
+    if (finalize) finalizeVoiceTranscript(true);
     const activeRecognition = recognitionRef.current;
     if (activeRecognition) {
       activeRecognition.onresult = null;
@@ -355,8 +365,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     if (recognitionRef.current || isRecording) {
       const recognition = recognitionRef.current;
       if (recognition) {
-        finalizePendingSpeech();
-        finishRecording(recognition, false);
+        finishRecording(recognition, true);
         setSpeechMessage("Transcrição pronta. Revise o texto antes de enviar.");
       } else {
         setIsRecording(false);
@@ -365,8 +374,6 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     }
 
     speechResultsRef.current.clear();
-    forcedFinalIndexesRef.current.clear();
-    punctuatedIndexesRef.current.clear();
     voiceBaseInputRef.current = input.trim();
 
     const recognition = new SpeechRecognition();
@@ -375,18 +382,12 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     recognition.continuous = true;
     recognition.onresult = (event) => {
       if (recognitionRef.current !== recognition) return;
-      const startIndex = Math.max(0, event.resultIndex);
-      for (let index = startIndex; index < event.results.length; index += 1) {
-        const result = event.results[index];
-        const item = result?.[0];
-        if (!item) continue;
-        const previous = speechResultsRef.current.get(index);
-        if (previous && previous.transcript !== item.transcript && !item.isFinal) {
-          forcedFinalIndexesRef.current.delete(index);
-          punctuatedIndexesRef.current.delete(index);
-        }
-        speechResultsRef.current.set(index, { transcript: item.transcript, isFinal: item.isFinal });
+      const snapshot = new Map<number, SpeechResult>();
+      for (let index = 0; index < event.results.length; index += 1) {
+        const item = event.results[index]?.[0];
+        if (item) snapshot.set(index, { transcript: item.transcript, isFinal: item.isFinal });
       }
+      speechResultsRef.current = snapshot;
       updateVoiceInput();
       setSpeechMessage("Ouvindo em português (Brasil)…");
       scheduleSpeechPause();
@@ -478,11 +479,13 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
         {drafts.map((draftItem, itemIndex) => (
           <Card key={`${draftItem.date}-${draftItem.description}-${itemIndex}`} className="border-white/10 bg-black/10 text-slate-100">
             <CardContent className="space-y-1 p-3">
-              <p><strong>{draftItem.type}</strong> · {draftItem.category}</p>
-              <p className="text-lg font-semibold text-emerald-300">{formatCurrency(draftItem.value)}</p>
-              <p>{draftItem.description}</p>
+              <p><strong>Tipo: {draftItem.type}</strong></p>
+              <p>Grupo: <strong>{getDraftGroupLabel(draftItem)}</strong></p>
+              <p>Categoria: {draftItem.category}</p>
+              <p>Descrição: {draftItem.description}</p>
+              <p className="text-lg font-semibold text-emerald-300">Valor: {formatCurrency(draftItem.value)}</p>
               <p className="text-slate-400">Data: {draftItem.date} · Pagamento: {draftItem.paymentMethod}</p>
-              <p className="text-slate-400">Parceiro: {draftItem.partnerName || "Não informado"}</p>
+              {getDraftSubgroup(draftItem) === "Saque" && <p className="text-slate-400">Sócio: {draftItem.partnerName}</p>}
               {draftItem.notes && <p className="text-slate-400">Obs.: {draftItem.notes}</p>}
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button type="button" size="sm" variant="outline" onClick={() => requestChange(itemIndex)} disabled={isLoading} className="border-white/15 bg-transparent text-slate-200 hover:bg-white/10 hover:text-white"><Pencil className="mr-1 h-4 w-4" />Alterar</Button>

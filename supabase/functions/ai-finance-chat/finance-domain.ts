@@ -1,4 +1,4 @@
-import type { FinanceContext, NormalizedDraft, Supabase, TransactionDraft } from "./types.ts";
+import type { DraftSubgroup, FinanceContext, NormalizedDraft, Supabase, TransactionDraft } from "./types.ts";
 
 export const DEFAULT_PAYMENT_METHOD = "Pix" as const;
 export const PAYMENT_METHODS = ["Pix", "Parcelado", "Dinheiro", "Cartão", "Transferência"] as const;
@@ -36,6 +36,18 @@ export const categoryOptions = (context: FinanceContext) => unique([
 const findAllowedCategory = (value: unknown, allowed: string[]) => {
   const wanted = normalize(value);
   return allowed.find((category) => normalize(category) === wanted);
+};
+
+const categoryIsIn = (category: string, categories: string[]) =>
+  categories.some((candidate) => normalizeComparable(candidate) === normalizeComparable(category));
+
+const deriveSubgroup = (type: "Entrada" | "Saída", accountType: "main" | "reserve", category: string, context: FinanceContext): DraftSubgroup => {
+  if (accountType === "reserve") return "Fundo";
+  if (type === "Entrada") return "Entrada";
+  if (normalizeComparable(category) === "saquedelucro") return "Saque";
+  if (categoryIsIn(category, context.activeCostCategories)) return "Custo";
+  if (categoryIsIn(category, context.expenseCategories)) return "Gasto";
+  return "Fundo";
 };
 
 const parsePositiveValue = (value: unknown) => {
@@ -116,6 +128,7 @@ export function normalizeDraft(raw: TransactionDraft, context: FinanceContext, a
       partnerName: partner?.name,
       accountType: accountType!,
       isTransfer,
+      subgroup: deriveSubgroup(type!, accountType!, category!, context),
     },
   };
 }
