@@ -89,7 +89,7 @@ Deno.serve(async (request) => {
           categoryOptions: [...new Set(normalizedDrafts.flatMap((normalized) => normalized.options))],
         }, 400, "error");
       }
-      const transactionIds = await executeDraft(supabase, normalizedDrafts.map((normalized) => normalized.draft!));
+      const transactionIds = await executeDraft(supabase, normalizedDrafts.map((normalized) => normalized.draft!), body.operationId);
       return finish({
         kind: "message",
         message: "Lançamentos confirmados e salvos com segurança.",

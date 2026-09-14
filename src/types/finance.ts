@@ -19,6 +19,14 @@ export interface CashReserveEntity {
   userId: string;
 }
 
+export interface AccountBalance {
+  id: string;
+  userId: string;
+  accountType: AccountType;
+  balance: number;
+  updatedAt?: string;
+}
+
 export interface Transaction {
   id: string;
   type: TransactionType;
@@ -31,9 +39,11 @@ export interface Transaction {
   partnerId?: string;
   isAutomated?: boolean; // Novo campo para identificar transações automáticas
   createdSource?: "manual" | "ai" | "pdf" | "system";
+  operationId?: string;
   sourceContractId?: string; // ID do contrato de origem
   accountType?: AccountType; // main ou reserve
   isTransfer?: boolean; // identifica se é transferência entre contas
+  transferGroupId?: string;
   pdfExternalId?: string;
   importBatchId?: string;
   importSource?: string;

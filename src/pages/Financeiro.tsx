@@ -117,7 +117,7 @@ const TotalInAccountStrip: React.FC<TotalInAccountStripProps> = ({ value, fundoC
 // Componente para a Linha de Transação
 interface TransactionItemProps {
   transaction: Transaction;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, isTransfer?: boolean) => void;
   onEdit: (updatedTransaction: Transaction) => void;
   getPartnerNameById: (id: string) => string | undefined;
   isHighlighted: boolean;
@@ -198,7 +198,7 @@ const TransactionItem: React.FC<TransactionItemProps> = ({ transaction, onDelete
                 <TransactionListActionsMenu
                     transaction={transaction}
                     onEdit={onEdit}
-                    onDelete={onDelete}
+                    onDelete={(id) => onDelete(id, transaction.isTransfer)}
                 />
             </div>
           </div>

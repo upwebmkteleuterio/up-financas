@@ -23,6 +23,8 @@ const getTodayAtMidnight = (): Date => {
     return now;
 };
 
+const createOperationId = () => crypto.randomUUID();
+
 const getLastSavedDate = (): Date => {
     const saved = localStorage.getItem(STORAGE_KEY_DATE);
     if (saved) {
@@ -91,6 +93,7 @@ const getInitialFormState = (initialData?: Transaction, defaultType?: Transactio
       partnerId: initialData.partnerId,
       accountType: accountType,
       isTransfer: initialData.isTransfer,
+      operationId: initialData.operationId,
     };
   }
   
@@ -105,6 +108,7 @@ const getInitialFormState = (initialData?: Transaction, defaultType?: Transactio
     partnerId: undefined,
     accountType: accountType,
     isTransfer: false,
+    operationId: createOperationId(),
   };
 };
 
@@ -253,6 +257,7 @@ export function useTransactionForm(
           partnerId: formData.partnerId,
           accountType: formData.accountType,
           isTransfer: formData.isTransfer || formData.category === "Fundo de Caixa" || formData.category === "Aporte Fundo" || formData.category === "Resgate Fundo",
+          operationId: formData.operationId,
       };
 
       if (onSubmit) {

@@ -1,7 +1,7 @@
 import { useMemo, useCallback, useState, useEffect } from "react";
-import { Transaction, Contract, CostCategory, ExpenseCategory, Partner, MarketingInvestment } from "@/types/finance";
+import { Transaction, AccountBalance, Contract, CostCategory, ExpenseCategory, Partner, MarketingInvestment } from "@/types/finance";
 import { parseISO, startOfMonth, endOfMonth, subMonths, startOfWeek, endOfWeek, subWeeks, format, setMonth, getYear } from "date-fns";
-import { useSupabasePaginatedQuery, useSupabaseMutation } from "./useSupabaseQuery";
+import { useSupabasePaginatedQuery, useSupabaseMutation, useSupabaseQuery } from "./useSupabaseQuery";
 import { useAuth } from "./useAuth";
 import { useCosts } from "./useCosts";
 import { useSales } from "./useSales";
@@ -20,7 +20,11 @@ const QUERY_KEY = [TABLE_NAME];
 const PAGE_SIZE = 50;
 
 // Função auxiliar para calcular o resumo de uma lista de transações
-const calculateSummary = (transactions: Transaction[], allTransactions: Transaction[], costCategoryNames: string[]) => {
+const calculateSummary = (
+  transactions: Transaction[],
+  balanceByAccount: Record<"main" | "reserve", number>,
+  costCategoryNames: string[]
+) => {
     // Resumo baseado APENAS nas transações fornecidas (filtradas por data, mas não paginadas)
     const totalEntradas = transactions
       .filter((t) => t.type === "Entrada" && !t.isTransfer)
@@ -51,35 +55,9 @@ const calculateSummary = (transactions: Transaction[], allTransactions: Transact
       .filter((t) => t.type === "Saída" && t.category === "Resgate Fundo")
       .reduce((sum, t) => sum + t.value, 0);
 
-    // Total em Conta Principal
-    const totalEmConta = allTransactions
-      .filter(t => t.accountType === 'main' || !t.accountType) // Considera main por padrão
-      .reduce((sum, t) => {
-        if (t.type === "Entrada") return sum + t.value;
-        if (t.type === "Saída") return sum - t.value;
-        return sum;
-    }, 0);
-
-    // Saldo do Fundo de Caixa
-    const totalFundoCaixa = allTransactions
-      .filter(t => t.accountType === 'reserve')
-      .reduce((sum, t) => {
-        if (t.type === "Entrada") return sum + t.value;
-        if (t.type === "Saída") return sum - t.value;
-        return sum;
-    }, 0);
-
-    // Para compatibilidade com transações antigas (legado)
-    const legacyFundoCaixa = allTransactions.reduce((sum, t) => {
-        if (!t.accountType && t.category === "Fundo de Caixa") {
-            if (t.type === "Saída") return sum + t.value;
-            if (t.type === "Entrada") return sum - t.value;
-        }
-        return sum;
-    }, 0);
-
-    const adjustedFundoCaixa = totalFundoCaixa + legacyFundoCaixa;
-    const totalContaComFundo = totalEmConta + adjustedFundoCaixa;
+    const totalEmConta = balanceByAccount.main;
+    const totalFundoCaixa = balanceByAccount.reserve;
+    const totalContaComFundo = totalEmConta + totalFundoCaixa;
 
     return {
       totalEntradas,
@@ -89,7 +67,7 @@ const calculateSummary = (transactions: Transaction[], allTransactions: Transact
       totalSaquesLucro,
       totalResgates,
       totalEmConta,
-      totalFundoCaixa: adjustedFundoCaixa,
+      totalFundoCaixa,
       totalContaComFundo,
     };
 };
@@ -229,6 +207,23 @@ export function useFinance() {
     "date",
     false
   );
+
+  const { data: accountBalances = [], isLoading: isLoadingBalances } = useSupabaseQuery<AccountBalance>(
+    "account_balances",
+    ["account_balances", user?.id],
+    "*",
+    !!user,
+    [{ column: "user_id", operator: "eq", value: user?.id }],
+    undefined,
+    undefined,
+    "account_type",
+    true
+  );
+
+  const balanceByAccount = useMemo(() => ({
+    main: Number(accountBalances.find((balance) => balance.accountType === "main")?.balance || 0),
+    reserve: Number(accountBalances.find((balance) => balance.accountType === "reserve")?.balance || 0),
+  }), [accountBalances]);
   
   // Mutações
   const { insert: insertMutation, update, remove } = useSupabaseMutation<Transaction, Omit<Transaction, "id">>(
@@ -243,91 +238,67 @@ export function useFinance() {
   const { insert: insertContract } = useSupabaseMutation<Contract, any>("contracts", ["contracts"]);
   const { insert: insertMarketing } = useSupabaseMutation<MarketingInvestment, any>("marketing_investments", ["marketing_investments"]);
 
-  // Mutação de inserção customizada para invalidar o cache global
   const addTransaction = useCallback(async (newTransaction: Omit<Transaction, "id">) => {
     if (!user) return;
 
-    console.log("[useFinance] Iniciando salvamento de transação:", newTransaction);
+    const payload = {
+      ...newTransaction,
+      accountType: newTransaction.accountType || "main",
+      isTransfer: newTransaction.isTransfer || false,
+      createdSource: newTransaction.createdSource || "manual",
+      operationId: newTransaction.operationId || crypto.randomUUID(),
+    };
 
-    try {
-        // 1. Prepara os dados (o insertMutation já cuida do snake_case e user_id)
-        const payload = {
-            ...newTransaction,
-            accountType: newTransaction.accountType || 'main',
-            isTransfer: newTransaction.isTransfer || false
-        };
+    const { data, error } = await supabase.rpc("create_transaction", {
+      p_transaction: keysToSnakeCase(payload),
+      p_operation_id: payload.operationId,
+    });
 
-        // 2. Insere a transação principal usando a mutação padrão (testada)
-        const insertedData = await insertMutation.mutateAsync(payload as any);
-        console.log("[useFinance] Transação principal salva com sucesso:", insertedData);
-
-        // 3. Se for uma transferência, cria a contraparte automaticamente
-        if (newTransaction.isTransfer) {
-            let counterpart: Omit<Transaction, "id"> | null = null;
-
-            // Caso A: Main -> Reserve (Aporte)
-            if (newTransaction.accountType === 'main' && newTransaction.type === 'Saída' && newTransaction.category === 'Fundo de Caixa') {
-                counterpart = {
-                    ...newTransaction,
-                    accountType: 'reserve',
-                    type: 'Entrada',
-                    category: 'Aporte Fundo',
-                    description: `Aporte vindo da Conta Principal: ${newTransaction.description}`,
-                    paymentMethod: 'Transferência'
-                };
-            }
-            // Caso B: Reserve -> Main (Resgate)
-            else if (newTransaction.accountType === 'reserve' && newTransaction.type === 'Saída' && newTransaction.category === 'Resgate Fundo') {
-                counterpart = {
-                    ...newTransaction,
-                    accountType: 'main',
-                    type: 'Entrada',
-                    category: 'Fundo de Caixa',
-                    description: `Resgate vindo do Fundo de Caixa: ${newTransaction.description}`,
-                    paymentMethod: 'Transferência'
-                };
-            }
-            // Caso C: Entrada direta de Aporte no Reserve -> Saída na Principal
-            else if (newTransaction.accountType === 'reserve' && newTransaction.type === 'Entrada' && newTransaction.category === 'Aporte Fundo') {
-                counterpart = {
-                    ...newTransaction,
-                    accountType: 'main',
-                    type: 'Saída',
-                    category: 'Fundo de Caixa',
-                    description: `Aporte para Fundo de Caixa: ${newTransaction.description}`,
-                    paymentMethod: 'Transferência'
-                };
-            }
-
-            if (counterpart) {
-                console.log("[useFinance] Criando contraparte de transferência:", counterpart);
-                await insertMutation.mutateAsync({ ...counterpart, isTransfer: true } as any);
-            }
-        }
-
-        dispatchTransactionCreated(insertedData.id);
-
-        // 4. Sucesso! (O aviso showSuccess já é disparado pelo hook useSupabaseMutation se eu não tivesse sobrescrevido,
-        // mas aqui eu uso o showSuccess manual para garantir a mensagem correta)
-        showSuccess(`${newTransaction.type === 'Entrada' ? 'Entrada' : 'Saída'} registrada com sucesso!`);
-    } catch (err: any) {
-        console.error("[useFinance] Erro fatal ao salvar transação:", err);
-        // O erro já foi mostrado via toast pelo onError do useSupabaseMutation
-        throw err;
+    if (error) {
+      showError(`Falha ao salvar transação: ${error.message}`);
+      throw new Error(`Falha ao salvar transação: ${error.message}`);
     }
-  }, [user, insertMutation]);
+
+    const insertedData = keysToCamelCase(data) as Transaction;
+    queryClient.invalidateQueries({ queryKey: QUERY_KEY, refetchType: "all" });
+    queryClient.invalidateQueries({ queryKey: ["account_balances"], refetchType: "all" });
+    dispatchTransactionCreated(insertedData.id);
+    showSuccess(`${newTransaction.type === "Entrada" ? "Entrada" : "Saída"} registrada com sucesso!`);
+    return insertedData;
+  }, [user, queryClient]);
   
-  const updateTransaction = useCallback((updatedTransaction: Transaction) => {
-    if (updatedTransaction.isAutomated) {
-      console.warn("Tentativa de editar transação automática bloqueada.");
-      return;
-    }
-    update.mutate(updatedTransaction);
-  }, [update]);
+  const updateTransaction = useCallback(async (updatedTransaction: Transaction) => {
+    if (updatedTransaction.isAutomated) return;
 
-  const deleteTransaction = useCallback((id: string) => {
-    remove.mutate(id);
-  }, [remove]);
+    if (updatedTransaction.isTransfer) {
+      const { error } = await supabase.rpc("update_transaction", {
+        p_transaction: keysToSnakeCase(updatedTransaction),
+      });
+      if (error) {
+        showError(`Falha ao atualizar transação: ${error.message}`);
+        throw error;
+      }
+    } else {
+      await update.mutateAsync(updatedTransaction);
+    }
+
+    queryClient.invalidateQueries({ queryKey: QUERY_KEY, refetchType: "all" });
+    queryClient.invalidateQueries({ queryKey: ["account_balances"], refetchType: "all" });
+  }, [queryClient, update]);
+
+  const deleteTransaction = useCallback(async (id: string, isTransfer?: boolean) => {
+    if (isTransfer) {
+      const { error } = await supabase.rpc("delete_transaction", { p_id: id });
+      if (error) {
+        showError(`Falha ao deletar transação: ${error.message}`);
+        throw error;
+      }
+    } else {
+      await remove.mutateAsync(id);
+    }
+    queryClient.invalidateQueries({ queryKey: QUERY_KEY, refetchType: "all" });
+    queryClient.invalidateQueries({ queryKey: ["account_balances"], refetchType: "all" });
+  }, [queryClient, remove]);
 
   const updateTransactionCategoryOnDelete = useCallback((oldCategoryName: string, newCategoryName: string) => {
     const transactionsToUpdate = allTransactions.filter(t => 
@@ -371,11 +342,11 @@ export function useFinance() {
     
     // Calcula o resumo usando a lista COMPLETA do período filtrado
     const summary = useMemo(() => {
-        return calculateSummary(summaryTransactions, allTransactions, costCategoryNames);
-    }, [summaryTransactions, allTransactions, costCategoryNames]);
+        return calculateSummary(summaryTransactions, balanceByAccount, costCategoryNames);
+    }, [summaryTransactions, balanceByAccount, costCategoryNames]);
     
-    return { summary, isLoadingSummary };
-  }, [user, allTransactions, costCategoryNames]);
+    return { summary, isLoadingSummary: isLoadingSummary || isLoadingBalances };
+  }, [user, balanceByAccount, isLoadingBalances, allTransactions, costCategoryNames]);
   // --- FIM NOVO HOOK ---
 
 

@@ -34,6 +34,7 @@ export type ChatRequest = {
   messages?: Array<{ role: "user" | "assistant"; content: string }>;
   drafts?: TransactionDraft[];
   draft?: TransactionDraft;
+  operationId?: string;
   confirmed?: boolean;
   diagnostics?: boolean;
 };

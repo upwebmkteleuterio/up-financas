@@ -99,6 +99,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
   const voiceBaseInputRef = useRef("");
   const messageIdRef = useRef(0);
   const lastSentMessageRef = useRef<string | null>(null);
+  const executionOperationIdRef = useRef<string | null>(null);
 
   useEffect(() => () => {
     if (pauseTimerRef.current !== null) window.clearTimeout(pauseTimerRef.current);
@@ -141,6 +142,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     text?: string,
     draftsToExecute?: AiTransactionDraft[],
     conversation: AiChatMessage[] = messages,
+    operationId?: string,
   ) => {
     if (isLoadingRef.current) return;
     isLoadingRef.current = true;
@@ -158,6 +160,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
             return serverMessage;
           }),
           drafts: draftsToExecute,
+          operationId,
           confirmed: mode === "execute",
           diagnostics: true,
         },
@@ -195,7 +198,10 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
         throw new Error(data.message);
       }
       if (mode === "execute") {
-        await queryClient.invalidateQueries({ queryKey: ["transactions"] });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["transactions"] }),
+          queryClient.invalidateQueries({ queryKey: ["account_balances"] }),
+        ]);
         const transactionIds = Array.isArray(data.transactionIds)
           ? data.transactionIds.filter((id): id is string => typeof id === "string" && id.length > 0)
           : typeof data.transactionId === "string"
@@ -208,6 +214,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
         showSuccess(createdCount === 1
           ? "Lançamento realizado com sucesso!"
           : `${createdCount} lançamentos realizados com sucesso!`);
+        executionOperationIdRef.current = null;
       }
       setMessages((current) => [...current, {
         id: `assistant-${messageIdRef.current++}`,
@@ -264,6 +271,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
       timestamp: new Date().toISOString(),
     };
     const conversation = [...messages, userMessage];
+    executionOperationIdRef.current = null;
     lastSentMessageRef.current = text;
     setInput("");
     setMessages(conversation);
@@ -406,16 +414,19 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
 
   const confirmDrafts = async () => {
     if (drafts.length === 0 || isLoadingRef.current) return;
-    await invokeChat("execute", undefined, drafts);
+    if (!executionOperationIdRef.current) executionOperationIdRef.current = crypto.randomUUID();
+    await invokeChat("execute", undefined, drafts, messages, executionOperationIdRef.current);
   };
 
   const requestChange = (itemIndex: number) => {
+    executionOperationIdRef.current = null;
     setInput(`Quero alterar o lançamento ${itemIndex + 1}: `);
     inputRef.current?.focus();
   };
 
   const removeDraft = (itemIndex: number) => {
     if (isLoadingRef.current) return;
+    executionOperationIdRef.current = null;
     setDrafts((current) => current.filter((_, index) => index !== itemIndex));
   };
 

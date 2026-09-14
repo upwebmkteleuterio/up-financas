@@ -95,7 +95,7 @@ const TotalInAccountStripReserve: React.FC<{ value: number; contaPrincipal: numb
     </Card>
 );
 
-const TransactionItem: React.FC<{ transaction: Transaction; onDelete: (id: string) => void; onEdit: (updatedTransaction: Transaction) => void }> = ({ transaction, onDelete, onEdit }) => {
+const TransactionItem: React.FC<{ transaction: Transaction; onDelete: (id: string, isTransfer?: boolean) => void; onEdit: (updatedTransaction: Transaction) => void }> = ({ transaction, onDelete, onEdit }) => {
   const isEntry = transaction.type === "Entrada";
   const valueClass = isEntry ? "text-green-500" : "text-red-500";
   const sign = isEntry ? "+" : "-";
@@ -115,7 +115,7 @@ const TransactionItem: React.FC<{ transaction: Transaction; onDelete: (id: strin
               <HiddenValue value={transaction.value} formatFn={(v) => `${sign} ${formatCurrency(v)}`} className={cn("font-bold whitespace-nowrap text-lg", valueClass)} />
               <span className="text-xs text-gray-400 mt-1 whitespace-nowrap">{format(createLocalDateFromISO(transaction.date), "dd/MM/yyyy")}</span>
             </div>
-            <div className="flex space-x-1 ml-4"><TransactionListActionsMenu transaction={transaction} onEdit={onEdit} onDelete={onDelete} /></div>
+            <div className="flex space-x-1 ml-4"><TransactionListActionsMenu transaction={transaction} onEdit={onEdit} onDelete={(id) => onDelete(id, transaction.isTransfer)} /></div>
           </div>
         </div>
     </NotesTooltip>

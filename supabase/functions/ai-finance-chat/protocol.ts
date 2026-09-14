@@ -18,6 +18,9 @@ export function sanitizeChatRequest(input: unknown): ChatRequest {
       ? input.drafts.slice(0, 50).map((draft) => isRecord(draft) ? draft as TransactionDraft : {})
       : undefined,
     draft: isRecord(input.draft) ? input.draft as TransactionDraft : undefined,
+    operationId: typeof input.operationId === "string" && /^[A-Za-z0-9:_-]{1,120}$/.test(input.operationId)
+      ? input.operationId
+      : undefined,
     confirmed: input.confirmed === true,
     diagnostics: input.diagnostics === true,
   };

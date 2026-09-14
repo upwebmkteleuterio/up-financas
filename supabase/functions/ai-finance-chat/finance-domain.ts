@@ -150,12 +150,35 @@ function counterpartPayload(draft: NormalizedDraft, payload: Record<string, unkn
   return null;
 }
 
-export async function executeDraft(supabase: Supabase, drafts: NormalizedDraft[]): Promise<string[]> {
-  const payloads = drafts.flatMap((draft) => {
+const stableUuid = async (seed: string) => {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(seed)));
+  digest[6] = (digest[6] & 0x0f) | 0x50;
+  digest[8] = (digest[8] & 0x3f) | 0x80;
+  const hex = Array.from(digest.slice(0, 16), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
+
+export async function executeDraft(supabase: Supabase, drafts: NormalizedDraft[], operationId?: string): Promise<string[]> {
+  const requestOperationId = operationId || crypto.randomUUID();
+  const payloads: Record<string, unknown>[] = [];
+
+  for (const [draftIndex, draft] of drafts.entries()) {
     const payload = transactionPayload(draft);
+    const stableOperationId = `${requestOperationId}:${draftIndex}`;
+    payload.operation_id = stableOperationId;
     const counterpart = draft.isTransfer ? counterpartPayload(draft, payload) : null;
-    return counterpart ? [payload, counterpart] : [payload];
-  });
+    if (counterpart) {
+      const transferGroupId = operationId
+        ? await stableUuid(`${requestOperationId}:${draftIndex}:transfer`)
+        : crypto.randomUUID();
+      payload.transfer_group_id = transferGroupId;
+      counterpart.operation_id = `${stableOperationId}:counterpart`;
+      counterpart.transfer_group_id = transferGroupId;
+      payloads.push(payload, counterpart);
+    } else {
+      payloads.push(payload);
+    }
+  }
   if (payloads.length < 1 || payloads.length > 50) throw new Error("A operação em lote excede o limite permitido.");
 
   const { data, error } = await supabase.rpc("create_ai_transaction_batch", { p_transactions: payloads });
