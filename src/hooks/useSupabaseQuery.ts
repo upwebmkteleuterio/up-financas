@@ -82,6 +82,70 @@ export function useSupabaseQuery<T extends SupabaseData>(
   });
 }
 
+export function useSupabasePaginatedQuery<T extends SupabaseData>(
+  tableName: string,
+  queryKey: (string | number)[],
+  selectQuery: string = "*",
+  enabled: boolean = true,
+  filters: SupabaseFilter[] = [],
+  pageSize: number = 1000,
+  orderBy: string = "created_at",
+  ascending: boolean = false
+) {
+  const { user } = useAuth();
+
+  const fetcher = async (): Promise<T[]> => {
+    if (!user) return [];
+
+    const results: T[] = [];
+    let offset = 0;
+    let totalCount: number | null = null;
+
+    while (totalCount === null || offset < totalCount) {
+      let query: any = supabase
+        .from(tableName)
+        .select(selectQuery, { count: "exact" })
+        .eq("user_id", user.id)
+        .order(orderBy, { ascending })
+        .order("id", { ascending: true })
+        .range(offset, offset + pageSize - 1);
+
+      filters.forEach(filter => {
+        query = (query[filter.operator] as any)(filter.column, filter.value);
+      });
+
+      const { data, error, count } = await query;
+
+      if (error) {
+        throw new Error(`Erro ao buscar ${tableName}: ${error.message}`);
+      }
+
+      const page = (data as unknown as T[]).map(keysToCamelCase) as T[];
+      results.push(...page);
+
+      if (page.length === 0) {
+        break;
+      }
+
+      if (count === null) {
+        throw new Error(`Não foi possível determinar a quantidade de registros de ${tableName}.`);
+      }
+
+      totalCount = count;
+      offset += page.length;
+    }
+
+    return results;
+  };
+
+  return useQuery<T[], Error>({
+    queryKey: [...queryKey, user?.id, "paginated", ...filters.map(f => `${f.column}:${f.value}`), pageSize, orderBy, ascending],
+    queryFn: fetcher,
+    enabled: enabled && !!user,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
 /**
  * Hook para mutações (INSERT, UPDATE, DELETE) no Supabase.
  * @param tableName Nome da tabela.

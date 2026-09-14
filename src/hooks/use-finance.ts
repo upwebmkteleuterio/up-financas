@@ -1,7 +1,7 @@
 import { useMemo, useCallback, useState, useEffect } from "react";
 import { Transaction, Contract, CostCategory, ExpenseCategory, Partner, MarketingInvestment } from "@/types/finance";
 import { parseISO, startOfMonth, endOfMonth, subMonths, startOfWeek, endOfWeek, subWeeks, format, setMonth, getYear } from "date-fns";
-import { useSupabaseQuery, useSupabaseMutation } from "./useSupabaseQuery";
+import { useSupabasePaginatedQuery, useSupabaseMutation } from "./useSupabaseQuery";
 import { useAuth } from "./useAuth";
 import { useCosts } from "./useCosts";
 import { useSales } from "./useSales";
@@ -147,9 +147,10 @@ export function useInfiniteTransactions(
         let query: any = supabase
             .from(TABLE_NAME)
             .select("*")
+            .eq("user_id", user.id)
             .eq("account_type", accountType) // Filtra por conta
             .order("date", { ascending: false })
-            .limit(PAGE_SIZE + 1) 
+            .limit(PAGE_SIZE + 1)
             .range(offset, offset + PAGE_SIZE);
 
         filters.forEach(filter => {
@@ -175,7 +176,7 @@ export function useInfiniteTransactions(
         isLoading,
         isFetching,
     } = useInfiniteQuery({
-        queryKey: [...QUERY_KEY, filterKey, 'infinite', accountType], 
+        queryKey: [...QUERY_KEY, user?.id, filterKey, 'infinite', accountType],
         queryFn: fetcher,
         initialPageParam: 0,
         getNextPageParam: (lastPage, allPages) => {
@@ -218,11 +219,15 @@ export function useFinance() {
   const costCategoryNames = useMemo(() => costCategories.map(c => c.name), [costCategories]);
   
   // Query para buscar TODAS as transações (necessário para o cálculo do Total em Conta)
-  const { data: allTransactions = [], isLoading: isLoadingAll } = useSupabaseQuery<Transaction>(
+  const { data: allTransactions = [], isLoading: isLoadingAll } = useSupabasePaginatedQuery<Transaction>(
     TABLE_NAME,
     [...QUERY_KEY, 'all'],
     "*",
-    !!user
+    !!user,
+    [],
+    1000,
+    "date",
+    false
   );
   
   // Mutações
@@ -341,7 +346,7 @@ export function useFinance() {
   }, [insertMutation, insertCost, insertExpense, insertPartner, insertContract, insertMarketing]);
 
 
-  // --- NOVO HOOK: Busca de Transações para Resumo (Sem Paginação) ---
+  // --- NOVO HOOK: Busca Paginada de Transações para Resumo ---
   const useFilteredTransactionsSummary = useCallback((
     dateFilter: FilterPeriod,
     customDateRange: { start: Date | undefined; end: Date | undefined },
@@ -349,15 +354,17 @@ export function useFinance() {
   ) => {
     const { filters, filterKey } = getFilterParams(dateFilter, customDateRange);
     
-    // Usamos useSupabaseQuery diretamente, passando os filtros
-    const { data: summaryTransactions = [], isLoading: isLoadingSummary } = useSupabaseQuery<Transaction>(
+    const { data: summaryTransactions = [], isLoading: isLoadingSummary } = useSupabasePaginatedQuery<Transaction>(
         TABLE_NAME,
         [...QUERY_KEY, filterKey, 'summary', accountType], // Chave de cache única para o resumo
         "*",
         !!user,
-        [...filters, { column: 'account_type', operator: 'eq', value: accountType }],
-        undefined, // Sem limite
-        undefined, // Sem offset
+        [
+          ...filters,
+          { column: 'account_type', operator: 'eq', value: accountType },
+          { column: 'user_id', operator: 'eq', value: user?.id },
+        ],
+        1000,
         "date",
         false
     );
