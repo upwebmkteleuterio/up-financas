@@ -140,6 +140,34 @@ const processServiceDistribution = (contracts: Contract[], interval: { start: Da
     })).sort((a, b) => b.value - a.value);
 };
 
+// Distribuição de Entradas e Saídas por Categoria
+const processTransactionDistribution = (
+    transactions: Transaction[],
+    interval: { start: Date; end: Date },
+    type: 'Entrada' | 'Saída'
+) => {
+    const categoryMap = new Map<string, number>();
+
+    transactions.forEach(transaction => {
+        if (transaction.type !== type || !transaction.date) return;
+        if (type === 'Saída' && transaction.category === 'Saque de Lucro') return;
+
+        const transactionDate = createLocalDateFromISO(transaction.date);
+        if (isWithinInterval(transactionDate, interval)) {
+            const category = transaction.category || 'Outros';
+            const currentTotal = categoryMap.get(category) || 0;
+            categoryMap.set(category, currentTotal + transaction.value);
+        }
+    });
+
+    const total = Array.from(categoryMap.values()).reduce((sum, value) => sum + value, 0);
+    return Array.from(categoryMap.entries()).map(([category, value]) => ({
+        name: category,
+        value,
+        percentage: total > 0 ? (value / total) * 100 : 0,
+    })).sort((a, b) => b.value - a.value);
+};
+
 // Distribuição de Saques por Nome (com Normalização)
 const processSaqueDistribution = (transactions: Transaction[], interval: { start: Date; end: Date }, partners: ReturnType<typeof usePartners>['partners']) => {
     const saqueMap = new Map<string, { label: string, value: number }>();
@@ -251,9 +279,10 @@ export function useReports() {
             filterInterval = { start: startOfWeek(now, weekOptions), end: endOfWeek(now, weekOptions) };
         }
         
-        if (!filterInterval) return { 
+        if (!filterInterval) return {
             saídaData: [], saqueData: [], vendasData: [], entradasData: [],
-            serviceDistribution: [], recurrenceData: [], futureReceivables: [], saqueDistribution: []
+            serviceDistribution: [], recurrenceData: [], futureReceivables: [], saqueDistribution: [],
+            entradasDistribution: [], saidasDistribution: []
         };
 
         const transactionData = processDataForChart(allTransactions, filterInterval, costCategoryNames, 'transactions');
@@ -288,6 +317,8 @@ export function useReports() {
             })),
             futureReceivables: processFutureReceivables(contracts),
             saqueDistribution: processSaqueDistribution(allTransactions, filterInterval, partners),
+            entradasDistribution: processTransactionDistribution(allTransactions, filterInterval, 'Entrada'),
+            saidasDistribution: processTransactionDistribution(allTransactions, filterInterval, 'Saída'),
         };
     }, [allTransactions, contracts, costCategoryNames, partners]);
 

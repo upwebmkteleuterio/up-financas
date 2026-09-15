@@ -40,6 +40,8 @@ const Relatorios = () => {
         recurrenceData,
         futureReceivables,
         saqueDistribution,
+        entradasDistribution,
+        saidasDistribution,
     } = useMemo(() => {
         return getReportData(dateFilter, customDateRange);
     }, [getReportData, dateFilter, customDateRange]);
@@ -94,6 +96,8 @@ const Relatorios = () => {
     
     const totalVendas = vendasData.reduce((sum, entry) => sum + (entry.Vendas || 0), 0);
     const totalSaques = saqueData.reduce((sum, entry) => sum + (entry["Saque de Lucro"] || 0), 0);
+    const totalEntradas = entradasData.reduce((sum, entry) => sum + (entry.Entradas || 0), 0);
+    const totalSaidas = saídaData.reduce((sum, entry) => sum + (entry.Custos || 0) + (entry.Gastos || 0), 0);
     
     const activeTabInfo = reportTabs.find(t => t.value === activeTab);
 
@@ -179,13 +183,22 @@ const Relatorios = () => {
                         />
                     </TabsContent>
                     
-                    <TabsContent value="Entradas" className="mt-0">
+                    <TabsContent value="Entradas" className="mt-0 space-y-6">
                         <ReportChart
                             title="Entradas Financeiras"
                             data={entradasData}
                             series={entradasSeries}
                             icon={<ArrowUp className="w-5 h-5 text-yellow-500" />}
                             chartType="area"
+                            totalValue={totalEntradas}
+                        />
+                        <ReportChart
+                            title="Distribuição por Categoria de Entrada"
+                            data={entradasDistribution}
+                            series={distributionColors.map(c => ({ key: "value", name: "Categoria", color: c.color }))}
+                            icon={<PieChart className="w-5 h-5 text-yellow-500" />}
+                            chartType="pie"
+                            totalValue={totalEntradas}
                         />
                     </TabsContent>
                     
@@ -196,6 +209,15 @@ const Relatorios = () => {
                             series={saídaSeries}
                             icon={<ArrowDown className="w-5 h-5 text-red-500" />}
                             chartType="area"
+                            totalValue={totalSaidas}
+                        />
+                        <ReportChart
+                            title="Distribuição por Categoria de Saída"
+                            data={saidasDistribution}
+                            series={distributionColors.map(c => ({ key: "value", name: "Categoria", color: c.color }))}
+                            icon={<PieChart className="w-5 h-5 text-red-500" />}
+                            chartType="pie"
+                            totalValue={totalSaidas}
                         />
                     </TabsContent>
                     
