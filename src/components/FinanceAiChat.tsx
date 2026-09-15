@@ -73,16 +73,15 @@ const formatDraftField = (draft: AiTransactionDraft) => ({
 });
 
 const getDraftSubgroup = (draft: AiTransactionDraft) => {
+  if (draft.type === "Saída" && draft.accountType === "main" && draft.category === "Saque de Lucro") return "Saque" as const;
   if (draft.subgroup) return draft.subgroup;
   if (draft.type === "Entrada") return "Entrada" as const;
   if (draft.accountType === "reserve") return "Fundo" as const;
-  if (draft.category === "Saque de Lucro") return "Saque" as const;
   if (draft.category === "Fundo de Caixa") return "Fundo" as const;
   return "Gasto" as const;
 };
 
-const getDraftGroupLabel = (draft: AiTransactionDraft) =>
-  getDraftSubgroup(draft) === "Fundo" && draft.accountType === "reserve" ? "Fundo de Caixa" : getDraftSubgroup(draft);
+const getDraftGroupLabel = (draft: AiTransactionDraft) => getDraftSubgroup(draft);
 
 const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
   const queryClient = useQueryClient();
@@ -476,24 +475,27 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
-        {drafts.map((draftItem, itemIndex) => (
-          <Card key={`${draftItem.date}-${draftItem.description}-${itemIndex}`} className="border-white/10 bg-black/10 text-slate-100">
-            <CardContent className="space-y-1 p-3">
-              <p><strong>Tipo: {draftItem.type}</strong></p>
-              <p>Grupo: <strong>{getDraftGroupLabel(draftItem)}</strong></p>
-              <p>Categoria: {draftItem.category}</p>
-              <p>Descrição: {draftItem.description}</p>
-              <p className="text-lg font-semibold text-emerald-300">Valor: {formatCurrency(draftItem.value)}</p>
-              <p className="text-slate-400">Data: {draftItem.date} · Pagamento: {draftItem.paymentMethod}</p>
-              {getDraftSubgroup(draftItem) === "Saque" && <p className="text-slate-400">Sócio: {draftItem.partnerName}</p>}
-              {draftItem.notes && <p className="text-slate-400">Obs.: {draftItem.notes}</p>}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant="outline" onClick={() => requestChange(itemIndex)} disabled={isLoading} className="border-white/15 bg-transparent text-slate-200 hover:bg-white/10 hover:text-white"><Pencil className="mr-1 h-4 w-4" />Alterar</Button>
-                <Button type="button" size="sm" variant="outline" onClick={() => removeDraft(itemIndex)} disabled={isLoading} className="border-red-300/20 bg-transparent text-red-200 hover:bg-red-300/10 hover:text-red-100"><Trash2 className="mr-1 h-4 w-4" />Remover</Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        {drafts.map((draftItem, itemIndex) => {
+          const subgroup = getDraftSubgroup(draftItem);
+          return (
+            <Card key={`${draftItem.date}-${draftItem.description}-${itemIndex}`} className="border-white/10 bg-black/10 text-slate-100">
+              <CardContent className="space-y-1 p-3">
+                <p><strong>Tipo: {draftItem.type}</strong></p>
+                <p>Grupo: <strong>{getDraftGroupLabel(draftItem)}</strong></p>
+                {(subgroup === "Custo" || subgroup === "Gasto") && <p>Categoria: {draftItem.category}</p>}
+                {subgroup === "Saque" && draftItem.partnerName && <p className="text-slate-400">Sócio: {draftItem.partnerName}</p>}
+                <p>Descrição: {draftItem.description}</p>
+                <p className="text-lg font-semibold text-emerald-300">Valor: {formatCurrency(draftItem.value)}</p>
+                <p className="text-slate-400">Data: {draftItem.date} · Pagamento: {draftItem.paymentMethod}</p>
+                {draftItem.notes && <p className="text-slate-400">Obs.: {draftItem.notes}</p>}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => requestChange(itemIndex)} disabled={isLoading} className="border-white/15 bg-transparent text-slate-200 hover:bg-white/10 hover:text-white"><Pencil className="mr-1 h-4 w-4" />Alterar</Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => removeDraft(itemIndex)} disabled={isLoading} className="border-red-300/20 bg-transparent text-red-200 hover:bg-red-300/10 hover:text-red-100"><Trash2 className="mr-1 h-4 w-4" />Remover</Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
         <Button type="button" onClick={confirmDrafts} disabled={isLoading} className="w-full bg-emerald-400 text-emerald-950 hover:bg-emerald-300">
           <Check className="mr-1 h-4 w-4" />
           {drafts.length === 1 ? "Confirmar lançamento" : `Confirmar ${drafts.length} lançamentos`}
