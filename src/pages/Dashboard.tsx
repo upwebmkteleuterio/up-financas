@@ -8,6 +8,7 @@ import { Users, DollarSign, ArrowUp, ArrowDown, TrendingUp, ShoppingBag } from "
 import React from "react";
 import { VisibilityToggleButton } from "@/hooks/useFinancialVisibility";
 import { Separator } from "@/components/ui/separator";
+import MonthlyGoalDashboardSection from "@/components/MonthlyGoalDashboardSection";
 
 const Dashboard = () => {
     const { weeklySummary, monthlyPerformance, annualPerformance, formatCurrency } = useDashboard();
@@ -52,6 +53,10 @@ const Dashboard = () => {
                     </div>
                     <VisibilityToggleButton />
                 </div>
+
+                <MonthlyGoalDashboardSection />
+
+                <Separator className="bg-sidebar-border" />
 
                 {/* --- SEÇÃO 1: RESUMO SEMANAL --- */}
                 <div className="space-y-4">

@@ -5,6 +5,7 @@ import { AlertTriangle } from "lucide-react";
 import React from "react";
 import UserProfileForm from "@/components/UserProfileForm";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import MonthlyGoalSettings from "@/components/MonthlyGoalSettings";
 
 const Configuracoes = () => {
   return (
@@ -31,6 +32,10 @@ const Configuracoes = () => {
             <TabsContent value="meus-dados" className="mt-6">
                 {/* Seção de Perfil e Senha */}
                 <UserProfileForm />
+
+                <div className="mt-6">
+                    <MonthlyGoalSettings />
+                </div>
                 
                 <Separator className="bg-sidebar-border my-6" />
 
