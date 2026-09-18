@@ -209,11 +209,10 @@
 
 @keyframes monthly-goal-shimmer {
   0% {
-    transform: translateX(-180%) skewX(-18deg);
+    transform: translateX(-100%) skewX(-18deg);
   }
-  55%,
   100% {
-    transform: translateX(360%) skewX(-18deg);
+    transform: translateX(520%) skewX(-18deg);
   }
 }
 
@@ -228,7 +227,7 @@
   inset: -20% auto -20% -25%;
   width: 24%;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
-  animation: monthly-goal-shimmer 7s ease-in-out infinite;
+  animation: monthly-goal-shimmer 7s linear infinite;
   pointer-events: none;
 }
 
