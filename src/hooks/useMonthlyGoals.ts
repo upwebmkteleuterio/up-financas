@@ -179,7 +179,7 @@ export function useMonthlyGoals() {
       salesPercentage,
       progressPercentage,
       pace: getPace(salesValue, expectedSales),
-      message: getGoalMessage(now.getDate(), getDaysInMonth(currentMonth), salesPercentage, isPreviousMonthFallback),
+      message: getGoalMessage(now.getDate(), getDaysInMonth(currentMonth), isPreviousMonthFallback),
       fallbackObservation: isPreviousMonthFallback
         ? `Sem vendas registradas no mês atual — ${currentMonthLabel}`
         : undefined,

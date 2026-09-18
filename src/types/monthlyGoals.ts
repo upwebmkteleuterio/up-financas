@@ -102,16 +102,16 @@ export function getProgressPercentage(salesValue: number, targetValue: number): 
   return targetValue > 0 ? Math.min(100, (salesValue / targetValue) * 100) : 0;
 }
 
-export function getGoalMessage(day: number, daysInMonth: number, salesPercentage: number, isPreviousMonthFallback: boolean): string {
-  const percentage = `${salesPercentage.toFixed(2).replace(".", ",")}%`;
-  if (isPreviousMonthFallback) return `Resultado final: atingimos ${percentage} da meta de vendas.`;
-  if (day === 5 || day === 6) return `Chegamos a um sexto do mês e atingimos ${percentage} da meta de vendas.`;
-  if (day === 10 || day === 11) return `Chegamos a um terço do mês e atingimos ${percentage} da meta de vendas.`;
-  if (day === 15 || day === 16) return `Chegamos à metade do mês e atingimos ${percentage} da meta de vendas.`;
-  if (day === 20 || day === 21) return `Chegamos a dois terços do mês e atingimos ${percentage} da meta de vendas.`;
-  if (day >= 25 && day < daysInMonth) return `Estamos chegando ao fim do mês e atingimos ${percentage} da meta de vendas.`;
-  if (day === daysInMonth) return `Chegamos ao final do mês e atingimos ${percentage} da meta de vendas.`;
-  return `Atingimos ${percentage} da meta de vendas.`;
+export function getGoalMessage(day: number, daysInMonth: number, isPreviousMonthFallback: boolean): string {
+  const percentageToken = "{{percentage}}";
+  if (isPreviousMonthFallback) return `Resultado final: atingimos ${percentageToken} da meta de vendas.`;
+  if (day === 5 || day === 6) return `Chegamos a um sexto do mês e atingimos ${percentageToken} da meta de vendas.`;
+  if (day === 10 || day === 11) return `Chegamos a um terço do mês e atingimos ${percentageToken} da meta de vendas.`;
+  if (day === 15 || day === 16) return `Chegamos à metade do mês e atingimos ${percentageToken} da meta de vendas.`;
+  if (day === 20 || day === 21) return `Chegamos a dois terços do mês e atingimos ${percentageToken} da meta de vendas.`;
+  if (day >= 25 && day < daysInMonth) return `Estamos chegando ao fim do mês e atingimos ${percentageToken} da meta de vendas.`;
+  if (day === daysInMonth) return `Chegamos ao final do mês e atingimos ${percentageToken} da meta de vendas.`;
+  return `Atingimos ${percentageToken} da meta de vendas.`;
 }
 
 export function getPreviousMonth(date: Date): Date {

@@ -1,5 +1,6 @@
 import { CalendarDays, Gauge, ShoppingBag, Target } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import HiddenValue from "@/components/HiddenValue";
 import { useMonthlyGoals } from "@/hooks/useMonthlyGoals";
 import { cn } from "@/lib/utils";
 
@@ -7,15 +8,16 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
 const paceStyles = {
-  green: { text: "text-green-400", bar: "bg-green-500", label: "No ritmo da meta" },
-  yellow: { text: "text-yellow-400", bar: "bg-yellow-500", label: "Atenção ao ritmo" },
-  red: { text: "text-red-400", bar: "bg-red-500", label: "Abaixo do ritmo" },
+  green: { text: "text-green-400", bar: "from-green-400 via-green-500 to-green-600", label: "No ritmo da meta" },
+  yellow: { text: "text-yellow-400", bar: "from-yellow-300 via-yellow-400 to-yellow-500", label: "Atenção ao ritmo" },
+  red: { text: "text-red-400", bar: "from-red-400 via-red-500 to-red-600", label: "Abaixo do ritmo" },
 };
 
 export default function MonthlyGoalDashboardSection() {
   const { dashboard, isLoadingDashboard } = useMonthlyGoals();
   const paceStyle = paceStyles[dashboard.pace];
   const remainingValue = Math.max(0, dashboard.targetValue - dashboard.salesValue);
+  const messageParts = dashboard.message.split("{{percentage}}");
 
   return (
     <section className="space-y-4" aria-label="Desempenho do mês">
@@ -40,17 +42,27 @@ export default function MonthlyGoalDashboardSection() {
                 <div className="flex items-end justify-between gap-4">
                   <div>
                     <p className="text-xs text-gray-400">Vendas acumuladas</p>
-                    <p className="text-2xl font-bold text-sidebar-primary-foreground">{formatCurrency(dashboard.salesValue)}</p>
+                    <p className="text-2xl font-bold text-sidebar-primary-foreground">
+                      <HiddenValue value={dashboard.salesValue} formatFn={formatCurrency} />
+                    </p>
                   </div>
                   <div className={cn("text-right text-sm font-semibold", paceStyle.text)}>
-                    <p>{dashboard.salesPercentage.toFixed(2).replace(".", ",")}% da meta</p>
+                    <p>
+                      <HiddenValue value={dashboard.salesPercentage} isCurrency={false} />% da meta
+                    </p>
+                    <p className="mt-1 text-xs font-normal text-gray-400">
+                      Meta esperada para hoje: <HiddenValue value={dashboard.expectedSales} formatFn={formatCurrency} />
+                    </p>
                     <p className="text-xs font-normal text-gray-400">{paceStyle.label}</p>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="h-3 overflow-hidden rounded-full bg-sidebar-accent">
                     <div
-                      className={cn("h-full rounded-full transition-all", paceStyle.bar)}
+                      className={cn(
+                        "monthly-goal-progress-fill h-full rounded-full bg-gradient-to-r transition-all",
+                        paceStyle.bar,
+                      )}
                       style={{ width: `${dashboard.progressPercentage}%` }}
                       role="progressbar"
                       aria-valuenow={dashboard.progressPercentage}
@@ -58,14 +70,15 @@ export default function MonthlyGoalDashboardSection() {
                       aria-valuemax={100}
                     />
                   </div>
-                  <div className="grid grid-cols-1 gap-1 text-xs text-gray-400 sm:grid-cols-3 sm:gap-2">
-                    <span>Meta: {formatCurrency(dashboard.targetValue)}</span>
-                    <span>Esperado: {formatCurrency(dashboard.expectedSales)}</span>
-                    <span>Falta: {formatCurrency(remainingValue)}</span>
+                  <div className="grid grid-cols-1 gap-1 text-xs text-gray-400 sm:grid-cols-2 sm:gap-2">
+                    <span>Meta: <HiddenValue value={dashboard.targetValue} formatFn={formatCurrency} /></span>
+                    <span>Falta: <HiddenValue value={remainingValue} formatFn={formatCurrency} /></span>
                   </div>
                 </div>
                 <div className="rounded-md border border-sidebar-border bg-sidebar-accent/30 p-3 text-sm text-gray-300">
-                  {dashboard.message}
+                  {messageParts[0]}
+                  <HiddenValue value={dashboard.salesPercentage} isCurrency={false} />%
+                  {messageParts[1]}
                 </div>
                 {dashboard.fallbackObservation && (
                   <p className="text-xs text-gray-400">{dashboard.fallbackObservation}</p>
@@ -90,16 +103,22 @@ export default function MonthlyGoalDashboardSection() {
               <div className="space-y-5">
                 <div>
                   <p className="text-xs text-gray-400">Total vendido em contratos</p>
-                  <p className="mt-1 text-3xl font-bold text-sidebar-primary-foreground">{formatCurrency(dashboard.salesValue)}</p>
+                  <p className="mt-1 text-3xl font-bold text-sidebar-primary-foreground">
+                    <HiddenValue value={dashboard.salesValue} formatFn={formatCurrency} />
+                  </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4 border-t border-sidebar-border pt-4">
                   <div>
                     <p className="text-xs text-gray-400">Contratos registrados</p>
-                    <p className="mt-1 text-lg font-semibold">{dashboard.salesCount}</p>
+                    <p className="mt-1 text-lg font-semibold">
+                      <HiddenValue value={dashboard.salesCount} isCurrency={false} />
+                    </p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-400">Meta selecionada</p>
-                    <p className="mt-1 text-lg font-semibold">{formatCurrency(dashboard.targetValue)}</p>
+                    <p className="mt-1 text-lg font-semibold">
+                      <HiddenValue value={dashboard.targetValue} formatFn={formatCurrency} />
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-gray-400">

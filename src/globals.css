@@ -206,3 +206,34 @@
   pointer-events: none;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 42%, rgba(16, 185, 129, 0.04));
 }
+
+@keyframes monthly-goal-shimmer {
+  0% {
+    transform: translateX(-180%) skewX(-18deg);
+  }
+  55%,
+  100% {
+    transform: translateX(360%) skewX(-18deg);
+  }
+}
+
+.monthly-goal-progress-fill {
+  position: relative;
+  overflow: hidden;
+}
+
+.monthly-goal-progress-fill::after {
+  content: "";
+  position: absolute;
+  inset: -20% auto -20% -25%;
+  width: 24%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
+  animation: monthly-goal-shimmer 7s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .monthly-goal-progress-fill::after {
+    animation: none;
+  }
+}
