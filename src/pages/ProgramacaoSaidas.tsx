@@ -3,6 +3,7 @@ import { differenceInCalendarMonths, format, isWithinInterval, startOfMonth, end
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import FilterDropdown, { FilterPeriod } from "@/components/FilterDropdown";
 import SearchInput from "@/components/SearchInput";
@@ -62,9 +63,15 @@ export default function ProgramacaoSaidas() {
           <div className="flex flex-wrap gap-2 pt-3" role="group" aria-label="Filtrar programações por status">
             {([{ value: "active", label: "Ativas" }, { value: "inactive", label: "Inativas" }] as const).map(tab => <Button key={tab.value} type="button" aria-pressed={status === tab.value} variant="outline" className={`border-sidebar-border bg-sidebar-accent/50 text-sidebar-primary-foreground ${status === tab.value ? "border-blue-500 text-blue-400" : ""}`} onClick={() => setStatus(tab.value)}>{tab.label}</Button>)}
           </div>
-          <div className="flex flex-wrap gap-2 pt-2" role="group" aria-label="Filtrar programações por tipo">
-            {([{ value: "all", label: "Todos" }, { value: "cost", label: "Custos" }, { value: "expense", label: "Gastos" }, { value: "profit", label: "Saques de Lucro" }, { value: "cash_reserve", label: "Fundo de Caixa" }] as const).map(tab => <Button key={tab.value} type="button" aria-pressed={kind === tab.value} variant="outline" className={`border-sidebar-border bg-sidebar-accent/50 text-sidebar-primary-foreground ${kind === tab.value ? "border-blue-500 text-blue-400" : ""}`} onClick={() => setKind(tab.value)}>{tab.label}</Button>)}
-          </div>
+          <Tabs value={kind} onValueChange={value => setKind(value as OutgoingKind | "all")} className="pt-2">
+            <TabsList className="h-auto max-w-full flex-wrap justify-start bg-sidebar-accent/50">
+              <TabsTrigger value="all">Todos</TabsTrigger>
+              <TabsTrigger value="cost">Custos</TabsTrigger>
+              <TabsTrigger value="expense">Gastos</TabsTrigger>
+              <TabsTrigger value="profit">Saques de Lucro</TabsTrigger>
+              <TabsTrigger value="cash_reserve">Fundo de Caixa</TabsTrigger>
+            </TabsList>
+          </Tabs>
           <CardTitle className="pt-3 text-xl font-bold">Programações cadastradas ({filtered.length})</CardTitle>
         </CardHeader>
         <CardContent className="p-0"><div className="space-y-1">
