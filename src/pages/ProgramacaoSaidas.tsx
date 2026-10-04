@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { differenceInCalendarMonths, isWithinInterval, startOfMonth, endOfMonth } from "date-fns";
+import { differenceInCalendarMonths, format, isWithinInterval, startOfMonth, endOfMonth } from "date-fns";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,11 +9,12 @@ import SearchInput from "@/components/SearchInput";
 import OutgoingProgramFormDialog from "@/components/OutgoingProgramFormDialog";
 import { useOutgoingPrograms } from "@/hooks/useOutgoingPrograms";
 import { OutgoingProgram } from "@/types/finance";
-import { Plus, Pencil } from "lucide-react";
+import { Banknote, BriefcaseBusiness, CircleDollarSign, Plus, Wallet } from "lucide-react";
 import { createLocalDateFromISO } from "@/lib/utils";
 
 const labelKind = (kind: string) => ({ cost: "Custo", expense: "Gasto", profit: "Saque de Lucro", cash_reserve: "Fundo de Caixa" }[kind] || kind);
 const currency = (v?: number | null) => v == null ? "Sem valor" : new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+const kindIcon = (kind: string) => kind === "cost" ? BriefcaseBusiness : kind === "profit" ? CircleDollarSign : kind === "cash_reserve" ? Wallet : Banknote;
 function targetBounds(period: FilterPeriod, custom: { start: Date | undefined; end: Date | undefined }) {
   const now = new Date();
   if (period === "custom" && custom.start && custom.end) return { start: custom.start, end: custom.end };
@@ -40,24 +41,50 @@ export default function ProgramacaoSaidas() {
   const [search, setSearch] = useState("");
   const [period, setPeriod] = useState<FilterPeriod>(`month_${new Date().getMonth()}` as FilterPeriod);
   const [range, setRange] = useState<{start: Date | undefined; end: Date | undefined}>({ start: undefined, end: undefined });
+  const [status, setStatus] = useState<"all" | "active" | "inactive">("all");
   const bounds = targetBounds(period, range);
   const filtered = useMemo(() => programs.filter(p =>
-    `${p.name} ${p.description || ""}`.toLowerCase().includes(search.toLowerCase()) && occursInRange(p, bounds)
-  ), [programs, search, period, range.start?.getTime(), range.end?.getTime()]);
+    `${p.name} ${p.description || ""}`.toLowerCase().includes(search.toLowerCase())
+    && occursInRange(p, bounds)
+    && (status === "all" || p.isActive === (status === "active"))
+  ), [programs, search, period, range.start?.getTime(), range.end?.getTime(), status]);
+
   return <Layout pageTitle="Programação Saídas" pageSubtitle="Regras de custos, gastos e demais saídas previstas.">
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><h1 className="text-3xl font-bold">Programação Saídas</h1><p className="mt-1 text-muted-foreground">Cadastre e mantenha regras de saídas e categorias ativas.</p></div>
-        <OutgoingProgramFormDialog trigger={<Button><Plus className="mr-2 h-4 w-4" />Nova Programação</Button>} />
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><h1 className="text-3xl font-bold text-sidebar-primary-foreground">Programação Saídas</h1><p className="mt-1 text-gray-400">Cadastre e mantenha regras de saídas e categorias ativas.</p></div>
+        <OutgoingProgramFormDialog trigger={<Button className="bg-green-600 text-white hover:bg-green-700"><Plus className="mr-2 h-4 w-4" />Nova Programação</Button>} />
       </div>
-      <Card><CardHeader><CardTitle>Programações cadastradas</CardTitle></CardHeader><CardContent className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><SearchInput value={search} onChange={setSearch} placeholder="Buscar programação..."/><FilterDropdown activeFilter={period} setActiveFilter={setPeriod} customDateRange={range} setCustomDateRange={setRange}/></div>
-        <div className="divide-y divide-border">{filtered.map((program: OutgoingProgram) => <div key={program.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0"><div className="flex items-center gap-2"><strong className="truncate">{program.name}</strong><span className="rounded bg-secondary px-2 py-0.5 text-xs">{labelKind(program.kind)}</span>{!program.isActive && <span className="text-xs text-muted-foreground">Inativa</span>}</div>
-            <p className="mt-1 text-sm text-muted-foreground">{program.description || "Sem descrição"} · {program.frequency === "none" ? "Somente categoria" : program.frequency === "once" ? "Avulsa" : program.frequency === "count" ? `${program.repeatCount} ocorrências mensais` : "Mensal contínua"} · {currency(program.value)}</p>
-            {program.startDate && program.dueDay && <p className="text-xs text-muted-foreground">Início {program.startDate} · vencimento dia {program.dueDay}</p>}
-          </div><div className="flex items-center gap-2"><span className="text-xs text-muted-foreground">Ativa</span><Switch checked={program.isActive} onCheckedChange={checked => saveProgram({ ...program, isActive: checked })}/><OutgoingProgramFormDialog initial={program} trigger={<Button variant="outline" size="icon" aria-label="Editar programação"><Pencil className="h-4 w-4"/></Button>} /></div>
-        </div>)}{filtered.length === 0 && <p className="py-8 text-center text-muted-foreground">Nenhuma programação encontrada.</p>}</div>
-      </CardContent></Card>
+      <Card className="border-sidebar-border bg-sidebar text-sidebar-foreground">
+        <CardHeader className="p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><SearchInput value={search} onChange={setSearch} placeholder="Buscar programação..."/><FilterDropdown activeFilter={period} setActiveFilter={setPeriod} customDateRange={range} setCustomDateRange={setRange}/></div>
+          <div className="flex flex-wrap gap-2 pt-3" role="group" aria-label="Filtrar programações por status">
+            {([{ value: "all", label: "Todas" }, { value: "active", label: "Ativas" }, { value: "inactive", label: "Inativas" }] as const).map(tab => <Button key={tab.value} type="button" aria-pressed={status === tab.value} variant="outline" className={`border-sidebar-border bg-sidebar-accent/50 text-sidebar-primary-foreground ${status === tab.value ? "border-blue-500 text-blue-400" : ""}`} onClick={() => setStatus(tab.value)}>{tab.label}</Button>)}
+          </div>
+          <CardTitle className="pt-3 text-xl font-bold">Programações cadastradas ({filtered.length})</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0"><div className="space-y-1">
+          {filtered.map((program: OutgoingProgram) => {
+            const Icon = kindIcon(program.kind);
+            const schedule = program.frequency === "none" ? "Somente categoria" : program.frequency === "once" ? "Avulsa" : program.frequency === "count" ? `${program.repeatCount} ocorrências mensais` : "Mensal contínua";
+            return <div key={program.id} className="flex flex-col border-b border-sidebar-border transition-colors hover:bg-sidebar-accent/30 sm:flex-row sm:items-stretch">
+              <OutgoingProgramFormDialog initial={program} trigger={
+                <button type="button" className="group flex min-w-0 flex-1 cursor-pointer flex-col justify-between gap-3 p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:flex-row sm:items-center">
+                  <div className="flex min-w-0 flex-1 items-center gap-4">
+                    <div className="shrink-0 rounded-lg bg-blue-900/40 p-2"><Icon className="h-5 w-5 text-blue-400" /></div>
+                    <div className="flex min-w-0 flex-col"><div className="flex flex-wrap items-center gap-2"><span className="truncate font-semibold text-sidebar-primary-foreground">{program.name}</span><span className="rounded bg-sidebar-accent/70 px-2 py-0.5 text-xs text-gray-400">{labelKind(program.kind)}</span></div>
+                      <span className="mt-1 text-xs text-gray-400">{program.description || "Sem descrição"}</span>
+                    </div>
+                  </div>
+                  <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:justify-end">
+                    <div className="flex flex-col sm:items-end"><strong className="whitespace-nowrap text-sidebar-primary-foreground">{currency(program.value)}</strong><span className="mt-1 text-xs text-gray-400">{schedule}{program.startDate && program.dueDay ? ` · Início ${format(createLocalDateFromISO(program.startDate), "dd/MM/yyyy")} · vence dia ${program.dueDay}` : ""}</span></div>
+                  </div>
+                </button>
+              } />
+              <div className="flex shrink-0 items-center gap-2 px-4 pb-4 sm:py-4"><span className="text-xs text-gray-400">{program.isActive ? "Ativa" : "Inativa"}</span><Switch aria-label={`${program.isActive ? "Desativar" : "Ativar"} ${program.name}`} checked={program.isActive} onCheckedChange={checked => saveProgram({ ...program, isActive: checked })} /></div>
+            </div>;
+          })}
+          {filtered.length === 0 && <p className="p-8 text-center text-gray-400">Nenhuma programação encontrada.</p>}
+        </div></CardContent>
+      </Card>
     </div>
   </Layout>;
 }
