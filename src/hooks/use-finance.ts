@@ -4,6 +4,7 @@ import { parseISO, startOfMonth, endOfMonth, subMonths, startOfWeek, endOfWeek, 
 import { useSupabasePaginatedQuery, useSupabaseMutation, useSupabaseQuery } from "./useSupabaseQuery";
 import { useAuth } from "./useAuth";
 import { useCosts } from "./useCosts";
+import { useOutgoingPrograms } from "./useOutgoingPrograms";
 import { useSales } from "./useSales";
 import { useExpenseCategories } from "./useExpenseCategories";
 import { usePartners } from "./usePartners";
@@ -190,11 +191,15 @@ export function useInfiniteTransactions(
 
 export function useFinance() {
   const { user } = useAuth();
-  const { costCategories } = useCosts(); 
+  const { costCategories } = useCosts();
+  const { programs: outgoingPrograms } = useOutgoingPrograms();
   const queryClient = useQueryClient();
   
-  // Nomes das categorias de custo ativas para o cálculo do resumo
-  const costCategoryNames = useMemo(() => costCategories.map(c => c.name), [costCategories]);
+  // Inclui nomes históricos para que transações antigas continuem classificadas como custo.
+  const costCategoryNames = useMemo(() => Array.from(new Set([
+    ...costCategories.map(c => c.name),
+    ...outgoingPrograms.filter(program => program.kind === "cost").flatMap(program => [program.name, ...(program.historicalNames || [])]),
+  ])), [costCategories, outgoingPrograms]);
   
   // Query para buscar TODAS as transações (necessário para o cálculo do Total em Conta)
   const { data: allTransactions = [], isLoading: isLoadingAll } = useSupabasePaginatedQuery<Transaction>(
@@ -351,7 +356,8 @@ export function useFinance() {
 
 
   return {
-    allTransactions, 
+    allTransactions,
+    balanceByAccount,
     isLoadingTransactions: isLoadingAll,
     addTransaction,
     updateTransaction,

@@ -1,0 +1,1 @@
+CREATE POLICY outgoing_occurrences_select_own ON public.outgoing_occurrences FOR SELECT TO authenticated USING (auth.uid() = user_id);

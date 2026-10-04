@@ -4,6 +4,46 @@ export type AccountType = "main" | "reserve";
 export type CostType = "Fixo" | "Variável";
 export type ContractType = "Parcelado" | "Fixo" | "Recorrente";
 export type MarketingCategory = "Meta Ads" | "Google Ads" | "Tiktok Ads" | "Plataforma Freelancer" | "Outros";
+export type OutgoingKind = "cost" | "expense" | "profit" | "cash_reserve";
+export type OutgoingFrequency = "none" | "once" | "count" | "monthly";
+export type OutgoingStatus = "pending" | "paid" | "partial";
+
+export interface OutgoingProgram {
+  id: string;
+  userId: string;
+  kind: OutgoingKind;
+  name: string;
+  description?: string | null;
+  value?: number | null;
+  costType?: CostType | null;
+  frequency: OutgoingFrequency;
+  startDate?: string | null;
+  dueDay?: number | null;
+  repeatCount?: number | null;
+  partnerId?: string | null;
+  isActive: boolean;
+  legacyCostCategoryId?: string | null;
+  legacyExpenseCategoryId?: string | null;
+  historicalNames?: string[] | null;
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface OutgoingOccurrence {
+  id?: string;
+  userId?: string;
+  programId: string;
+  sequenceNumber: number | null;
+  dueDate: string;
+  scheduledValue: number;
+  status: OutgoingStatus;
+  actualValue?: number | null;
+  actualDate?: string | null;
+  transactionId?: string | null;
+  isResidual: boolean;
+  parentOccurrenceId?: string | null;
+}
 
 export interface Partner {
   id: string;
@@ -117,6 +157,7 @@ export interface CostCategory {
 export interface ExpenseCategory {
   id: string;
   name: string;
+  isActive?: boolean;
 }
 
 export interface ServiceCategory {

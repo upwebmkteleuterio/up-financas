@@ -29,13 +29,16 @@ export async function executeTool(supabase: Supabase, userId: string, name: unkn
   }
 
   if (Object.keys(rawArguments).length > 0) throw new Error("list_categories não aceita argumentos.");
-  const [costs, expenses] = await Promise.all([
-    supabase.from("cost_categories").select("name").eq("user_id", userId).eq("is_active", true).order("name"),
-    supabase.from("expense_categories").select("name").eq("user_id", userId).order("name"),
-  ]);
-  if (costs.error || expenses.error) throw new Error("Não foi possível consultar categorias.");
-  const costCategories = unique((costs.data || []).map((row) => row.name));
-  const expenseCategories = unique((expenses.data || []).map((row) => row.name));
+  const { data: programs, error } = await supabase
+    .from("outgoing_programs")
+    .select("name, kind")
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .in("kind", ["cost", "expense"])
+    .order("name");
+  if (error) throw new Error("Não foi possível consultar categorias.");
+  const costCategories = unique((programs || []).filter((row) => row.kind === "cost").map((row) => row.name));
+  const expenseCategories = unique((programs || []).filter((row) => row.kind === "expense").map((row) => row.name));
   return {
     tool: "list_categories",
     label: "Consultei categorias ativas",

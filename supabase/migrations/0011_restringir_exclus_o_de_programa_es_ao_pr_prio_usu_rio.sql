@@ -1,0 +1,1 @@
+CREATE POLICY outgoing_programs_delete_own ON public.outgoing_programs FOR DELETE TO authenticated USING (auth.uid() = user_id);

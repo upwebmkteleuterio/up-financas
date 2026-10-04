@@ -1,0 +1,1 @@
+CREATE INDEX outgoing_programs_user_kind_idx ON public.outgoing_programs(user_id, kind, is_active);

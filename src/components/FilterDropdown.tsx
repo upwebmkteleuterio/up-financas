@@ -135,9 +135,9 @@ const FilterDropdown: React.FC<FilterDropdownProps> = ({
           
           <ScrollArea className="h-[calc(100vh-80px)]">
             <div className="p-2 space-y-1">
-              <div className="px-4 py-2 text-xs font-semibold uppercase text-gray-500 tracking-wider">
+              {filterOptions.some(option => option.value.startsWith("month_") && allowedFilters.includes(option.value)) && <div className="px-4 py-2 text-xs font-semibold uppercase text-gray-500 tracking-wider">
                 Meses do Ano
-              </div>
+              </div>}
               
               {filterOptions
                 .filter(option => option.value.startsWith("month_") && allowedFilters.includes(option.value))
@@ -158,6 +158,16 @@ const FilterDropdown: React.FC<FilterDropdownProps> = ({
                     {option.label}
                   </button>
                 ))}
+
+              {filterOptions.some(option => option.value.endsWith("_week") && allowedFilters.includes(option.value)) && <div className="pt-2 mt-2 border-t border-border">
+                <div className="px-4 py-2 text-xs font-semibold uppercase text-gray-500 tracking-wider">Semanas</div>
+                {filterOptions.filter(option => option.value.endsWith("_week") && allowedFilters.includes(option.value)).map(option => (
+                  <button key={option.value} onClick={() => { setActiveFilter(option.value); setIsSheetOpen(false); }} className={cn(
+                    "w-full text-left px-4 py-3 rounded-md transition-colors text-sm",
+                    activeFilter === option.value ? "bg-sidebar-primary text-sidebar-primary-foreground font-semibold" : "text-foreground hover:bg-sidebar-accent/50"
+                  )}>{option.label}</button>
+                ))}
+              </div>}
 
               {/* Opção Personalizar */}
               {allowedFilters.includes("custom") && (

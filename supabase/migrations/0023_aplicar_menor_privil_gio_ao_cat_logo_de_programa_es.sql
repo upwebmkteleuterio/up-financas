@@ -1,0 +1,1 @@
+REVOKE DELETE, TRUNCATE, REFERENCES, TRIGGER ON TABLE public.outgoing_programs FROM authenticated;

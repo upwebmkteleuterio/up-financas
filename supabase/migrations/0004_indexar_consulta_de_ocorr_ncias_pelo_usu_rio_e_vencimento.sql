@@ -1,0 +1,1 @@
+CREATE INDEX outgoing_occurrences_user_due_date_idx ON public.outgoing_occurrences(user_id, due_date);

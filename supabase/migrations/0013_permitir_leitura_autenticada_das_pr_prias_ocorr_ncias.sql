@@ -1,0 +1,1 @@
+GRANT SELECT ON TABLE public.outgoing_occurrences TO authenticated;

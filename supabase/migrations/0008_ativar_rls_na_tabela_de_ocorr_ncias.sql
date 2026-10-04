@@ -1,0 +1,1 @@
+ALTER TABLE public.outgoing_occurrences ENABLE ROW LEVEL SECURITY;

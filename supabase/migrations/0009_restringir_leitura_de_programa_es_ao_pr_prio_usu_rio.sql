@@ -1,0 +1,1 @@
+CREATE POLICY outgoing_programs_select_own ON public.outgoing_programs FOR SELECT TO authenticated USING (auth.uid() = user_id);

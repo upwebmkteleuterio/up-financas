@@ -1,0 +1,1 @@
+CREATE POLICY outgoing_programs_update_own ON public.outgoing_programs FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id AND (partner_id IS NULL OR EXISTS (SELECT 1 FROM public.partners p WHERE p.id = partner_id AND p.user_id = auth.uid())));

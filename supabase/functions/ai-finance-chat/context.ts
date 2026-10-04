@@ -25,17 +25,17 @@ export async function loadContext(supabase: Supabase, userId: string): Promise<F
   const currentYear = Number(dateParts.year);
   const currentMonth = Number(dateParts.month);
   const currentDate = `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
-  const [costs, expenses, partners] = await Promise.all([
-    supabase.from("cost_categories").select("name").eq("user_id", userId).eq("is_active", true),
-    // expense_categories predates an is_active column; every row is an available category.
-    supabase.from("expense_categories").select("name").eq("user_id", userId),
+  const [outgoingPrograms, partners] = await Promise.all([
+    supabase.from("outgoing_programs").select("name, kind").eq("user_id", userId).eq("is_active", true).in("kind", ["cost", "expense"]),
     supabase.from("partners").select("id, name").eq("user_id", userId).eq("is_active", true),
   ]);
-  const failure = [costs, expenses, partners].find((result) => result.error);
+  const failure = [outgoingPrograms, partners].find((result) => result.error);
   if (failure?.error) throw new Error("Não foi possível carregar as opções financeiras.");
+  const costRows = (outgoingPrograms.data || []).filter((row) => row.kind === "cost");
+  const expenseRows = (outgoingPrograms.data || []).filter((row) => row.kind === "expense");
   return {
-    activeCostCategories: unique((costs.data || []).map((row) => row.name)),
-    expenseCategories: unique((expenses.data || []).map((row) => row.name)),
+    activeCostCategories: unique(costRows.map((row) => row.name)),
+    expenseCategories: unique(expenseRows.map((row) => row.name)),
     entryCategories: unique([...MAIN_ENTRY_CATEGORIES, ...RESERVE_ENTRY_CATEGORIES]),
     activePartners: (partners.data || []).map((row) => ({ id: row.id, name: row.name })),
     currentDate,

@@ -17,6 +17,7 @@ import { isWithinInterval, parseISO, format } from "date-fns";
 import TransactionIcon from "@/components/TransactionIcon";
 import { usePartners } from "@/hooks/usePartners";
 import { useCosts } from "@/hooks/useCosts";
+import { useOutgoingPrograms } from "@/hooks/useOutgoingPrograms";
 import HiddenValue from "@/components/HiddenValue";
 import { VisibilityToggleButton } from "@/hooks/useFinancialVisibility";
 import FloatingActionButton from "@/components/FloatingActionButton";
@@ -219,6 +220,7 @@ const Financeiro = () => {
   const { addTransaction, updateTransaction, deleteTransaction, useFilteredTransactionsSummary } = useFinance();
   const { getPartnerNameById } = usePartners();
   const { costCategories } = useCosts();
+  const { programs: outgoingPrograms } = useOutgoingPrograms();
   const isMobile = useIsMobile();
   
   const [activeTab, setActiveTab] = useState<"Todos" | TransactionType | "Saque de Lucro" | "Fundo de Caixa">("Todos");
@@ -230,7 +232,10 @@ const Financeiro = () => {
   const [highlightedTransactionIds, setHighlightedTransactionIds] = useState<Set<string>>(new Set());
   const highlightTimeoutRef = useRef<number | null>(null);
   
-  const costCategoryNames = useMemo(() => costCategories.map(c => c.name), [costCategories]);
+  const costCategoryNames = useMemo(() => Array.from(new Set([
+    ...costCategories.map(c => c.name),
+    ...outgoingPrograms.filter(program => program.kind === "cost").flatMap(program => [program.name, ...(program.historicalNames || [])]),
+  ])), [costCategories, outgoingPrograms]);
 
   const { transactions: dateFilteredTransactions, isLoading: isLoadingInfinite, hasMore, loadMore, isFetching } = useInfiniteTransactions(dateFilter, customDateRange, costCategoryNames, "main");
   const { summary } = useFilteredTransactionsSummary(dateFilter, customDateRange, "main");

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX outgoing_programs_legacy_expense_idx ON public.outgoing_programs(legacy_expense_category_id) WHERE legacy_expense_category_id IS NOT NULL;

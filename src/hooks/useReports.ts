@@ -1,6 +1,7 @@
 import { useMemo, useCallback } from "react";
 import { useFinance } from "./use-finance";
 import { useCosts } from "./useCosts";
+import { useOutgoingPrograms } from "./useOutgoingPrograms";
 import { useSales } from "./useSales";
 import { usePartners } from "./usePartners";
 import { FilterPeriod } from "@/components/FilterDropdown";
@@ -245,9 +246,13 @@ export function useReports() {
     const { allTransactions } = useFinance();
     const { contracts } = useSales();
     const { costCategories } = useCosts();
+    const { programs } = useOutgoingPrograms();
     const { partners } = usePartners();
     
-    const costCategoryNames = useMemo(() => costCategories.map(c => c.name), [costCategories]);
+    const costCategoryNames = useMemo(() => Array.from(new Set([
+      ...costCategories.map(c => c.name),
+      ...programs.filter(program => program.kind === "cost").flatMap(program => [program.name, ...(program.historicalNames || [])]),
+    ])), [costCategories, programs]);
 
     const getReportData = useCallback((
         dateFilter: FilterPeriod,

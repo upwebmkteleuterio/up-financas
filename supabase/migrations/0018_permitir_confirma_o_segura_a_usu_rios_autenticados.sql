@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.confirm_outgoing_occurrence(uuid, integer, date, numeric, numeric, date, text, text, text, date, date) TO authenticated;

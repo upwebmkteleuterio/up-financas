@@ -1,0 +1,1 @@
+ALTER TABLE public.outgoing_programs ENABLE ROW LEVEL SECURITY;

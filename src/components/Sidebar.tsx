@@ -10,14 +10,15 @@ import {
   FileText,
   ChevronLeft,
   ChevronRight,
-  ClipboardList,
   Users,
   LogOut,
-  Tag,
   Calculator,
   Briefcase,
   Shield,
   MessageCircle,
+  CalendarClock,
+  CircleDollarSign,
+  ChartNoAxesCombined,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { Button } from "./ui/button";
@@ -169,8 +170,9 @@ const Sidebar: React.FC<SidebarProps> = ({
           <NavItem to="/proventos" icon={<Calculator className="w-5 h-5" />} label="Gestão de Proventos" isCollapsed={isCollapsed} />
           <NavItem to="/marketing" icon={<Megaphone className="w-5 h-5" />} label="Marketing" isCollapsed={isCollapsed} />
           <NavItem to="/servicos" icon={<Briefcase className="w-5 h-5" />} label="Gestão de Soluções" isCollapsed={isCollapsed} />
-          <NavItem to="/custos" icon={<ClipboardList className="w-5 h-5" />} label="Gestão de Custos" isCollapsed={isCollapsed} />
-          <NavItem to="/gastos" icon={<Tag className="w-5 h-5" />} label="Gestão de Gastos" isCollapsed={isCollapsed} />
+          <NavItem to="/programacao-saidas" icon={<CalendarClock className="w-5 h-5" />} label="Programação Saídas" isCollapsed={isCollapsed} />
+          <NavItem to="/saidas" icon={<CircleDollarSign className="w-5 h-5" />} label="Saídas" isCollapsed={isCollapsed} />
+          <NavItem to="/fluxo-caixa" icon={<ChartNoAxesCombined className="w-5 h-5" />} label="Fluxo de Caixa" isCollapsed={isCollapsed} />
           <NavItem to="/saques" icon={<Users className="w-5 h-5" />} label="Gestão de Saques" isCollapsed={isCollapsed} />
           <NavItem to="/relatorios" icon={<FileText className="w-5 h-5" />} label="Relatórios" isCollapsed={isCollapsed} />
         </nav>

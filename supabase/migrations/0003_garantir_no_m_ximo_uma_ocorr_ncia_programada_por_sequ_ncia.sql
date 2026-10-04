@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX outgoing_occurrences_program_sequence_idx ON public.outgoing_occurrences(program_id, sequence_number) WHERE sequence_number IS NOT NULL;

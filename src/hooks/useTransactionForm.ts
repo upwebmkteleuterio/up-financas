@@ -230,6 +230,10 @@ export function useTransactionForm(
       toast({ title: "Erro de Validação", description: "O valor deve ser maior que zero.", variant: "destructive" });
       return;
     }
+    if (formData.category === "Saque de Lucro" && !formData.partnerId) {
+      toast({ title: "Erro de Validação", description: "Selecione o sócio para registrar o saque.", variant: "destructive" });
+      return;
+    }
 
     setIsSubmitting(true);
     try {

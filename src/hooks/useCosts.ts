@@ -1,101 +1,54 @@
-import { useState, useMemo, useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { CostCategory } from "@/types/finance";
-import { parseISO } from "date-fns";
-import { useSupabaseQuery, useSupabaseMutation } from "./useSupabaseQuery";
-import { useAuth } from "./useAuth";
-
-const TABLE_NAME = "cost_categories";
-const QUERY_KEY = [TABLE_NAME];
-
-// Função auxiliar para extrair o dia do mês para ordenação
-const getDueDay = (category: CostCategory): number => {
-    if (category.type === "Fixo" && category.dueDate) {
-        try {
-            // Extrai o dia do mês (1-31)
-            return parseISO(category.dueDate).getDate();
-        } catch (e) {
-            // Em caso de erro de parsing (data inválida), trata como variável
-            return 32;
-        }
-    }
-    // Coloca custos variáveis no final (dia 32)
-    return 32; 
-};
+import { useOutgoingPrograms } from "./useOutgoingPrograms";
 
 export function useCosts() {
-  const { user } = useAuth();
-  
-  // Query para buscar todas as categorias de custo
-  const { data: costCategories = [], isLoading: isLoadingCosts } = useSupabaseQuery<CostCategory>(
-    TABLE_NAME,
-    QUERY_KEY,
-    "*",
-    !!user
-  );
-
-  // Mutações
-  // O tipo V (valor de inserção) é Omit<CostCategory, "id" | "isActive">
-  const { insert, update, remove } = useSupabaseMutation<CostCategory, Omit<CostCategory, "id" | "isActive">>(
-    TABLE_NAME,
-    QUERY_KEY
-  );
-
-  const sortedCostCategories = useMemo(() => {
-    // 1. Ordena por dia de vencimento (1 a 31)
-    const sorted = [...costCategories].sort((a, b) => getDueDay(a) - getDueDay(b));
-    
-    // 2. Garante que as categorias ativas venham antes das inativas
-    return sorted.sort((a, b) => {
-        if (a.isActive && !b.isActive) return -1;
-        if (!a.isActive && b.isActive) return 1;
-        return 0;
-    });
-  }, [costCategories]);
-
-  const addCostCategory = useCallback((newCategory: Omit<CostCategory, "id" | "isActive">) => {
-    // Adiciona isActive: true e envia o objeto camelCase
-    const categoryToInsert = { ...newCategory, isActive: true };
-    insert.mutate(categoryToInsert as any);
-  }, [insert]);
-  
-  const updateCostCategory = useCallback((updatedCategory: CostCategory) => {
-    // Envia o objeto camelCase completo
-    update.mutate(updatedCategory);
-  }, [update]);
-
-  const deleteCostCategory = useCallback((id: string) => {
-    remove.mutate(id);
-  }, [remove]);
-
-  const toggleCostCategoryActive = useCallback((id: string) => {
-    const category = costCategories.find(c => c.id === id);
-    if (category) {
-        const newIsActive = !category.isActive;
-        
-        // Envia o objeto camelCase completo com o estado atualizado
-        const updatedCategory = { ...category, isActive: newIsActive };
-        
-        update.mutate(updatedCategory);
-    }
-  }, [costCategories, update]);
-
-  const summary = useMemo(() => {
-    const activeFixedCosts = costCategories
-      .filter(c => c.isActive && c.type === "Fixo" && c.value)
-      .reduce((sum, c) => sum + c.value!, 0);
-
+  const { programs, isLoading, saveProgram } = useOutgoingPrograms();
+  const outgoingCosts = useMemo(() => programs.filter(program => program.kind === "cost"), [programs]);
+  const costCategories: CostCategory[] = useMemo(() => outgoingCosts.map(program => {
+    const start = program.startDate ? new Date(`${program.startDate}T00:00:00`) : null;
+    const dueDay = start && program.dueDay ? Math.min(program.dueDay, new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate()) : null;
+    const dueDate = start && dueDay ? `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(dueDay).padStart(2, "0")}` : undefined;
     return {
-      totalActiveFixedCosts: activeFixedCosts,
+      id: program.id,
+      name: program.name,
+      type: program.costType || "Variável",
+      dueDate,
+      value: program.value == null ? undefined : Number(program.value),
+      description: program.description || undefined,
+      isActive: program.isActive,
     };
-  }, [costCategories]);
-
-  return {
-    costCategories: sortedCostCategories, // Exporta a lista ordenada
-    isLoadingCosts,
-    addCostCategory,
-    updateCostCategory,
-    deleteCostCategory,
-    toggleCostCategoryActive,
-    summary,
-  };
+  }).sort((a, b) => {
+    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+    return (a.dueDate || "9999-12-31").localeCompare(b.dueDate || "9999-12-31");
+  }), [outgoingCosts]);
+  const addCostCategory = useCallback((category: Omit<CostCategory, "id" | "isActive">) => saveProgram({
+    name: category.name,
+    description: category.description,
+    value: category.value,
+    kind: "cost",
+    costType: category.type,
+    frequency: category.type === "Fixo" ? "monthly" : "none",
+    startDate: category.dueDate,
+    dueDay: category.dueDate ? new Date(`${category.dueDate}T00:00:00`).getDate() : undefined,
+    isActive: true,
+  }), [saveProgram]);
+  const updateCostCategory = useCallback((category: CostCategory) => {
+    const original = outgoingCosts.find(program => program.id === category.id);
+    if (!original) return;
+    return saveProgram({ ...original, name: category.name, description: category.description, value: category.value, costType: category.type,
+      historicalNames: category.name !== original.name ? Array.from(new Set([...(original.historicalNames || []), original.name])) : original.historicalNames,
+      frequency: category.type === "Fixo" ? (original.frequency === "none" ? "monthly" : original.frequency) : original.frequency,
+      startDate: category.dueDate || original.startDate, dueDay: category.dueDate ? new Date(`${category.dueDate}T00:00:00`).getDate() : original.dueDay });
+  }, [outgoingCosts, saveProgram]);
+  const deleteCostCategory = useCallback((id: string) => {
+    const program = outgoingCosts.find(item => item.id === id);
+    if (program) return saveProgram({ ...program, isActive: false });
+  }, [outgoingCosts, saveProgram]);
+  const toggleCostCategoryActive = useCallback((id: string) => {
+    const program = outgoingCosts.find(item => item.id === id);
+    if (program) return saveProgram({ ...program, isActive: !program.isActive });
+  }, [outgoingCosts, saveProgram]);
+  const summary = useMemo(() => ({ totalActiveFixedCosts: costCategories.filter(c => c.isActive && c.type === "Fixo" && c.value).reduce((total, c) => total + c.value!, 0) }), [costCategories]);
+  return { costCategories, isLoadingCosts: isLoading, addCostCategory, updateCostCategory, deleteCostCategory, toggleCostCategoryActive, summary };
 }
