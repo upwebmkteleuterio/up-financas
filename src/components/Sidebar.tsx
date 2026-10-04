@@ -19,6 +19,7 @@ import {
   CalendarClock,
   CircleDollarSign,
   ChartNoAxesCombined,
+  Target,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { Button } from "./ui/button";
@@ -163,6 +164,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               </h2>
             )}
             <NavItem to="/dashboard" icon={<LayoutDashboard className="w-5 h-5" />} label="Dashboard" isCollapsed={isCollapsed} />
+            <NavItem to="/metas-anuais" icon={<Target className="w-5 h-5" />} label="Metas anuais" isCollapsed={isCollapsed} />
             <NavItem to="/financeiro" icon={<DollarSign className="w-5 h-5" />} label="Financeiro" isCollapsed={isCollapsed} />
             <NavItem to="/fundo-caixa" icon={<Shield className="w-5 h-5" />} label="Fundo de Caixa" isCollapsed={isCollapsed} />
           </section>

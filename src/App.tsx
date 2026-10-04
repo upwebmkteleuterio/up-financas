@@ -22,6 +22,7 @@ import ProgramacaoSaidas from "./pages/ProgramacaoSaidas";
 import Saidas from "./pages/Saidas";
 import FluxoCaixa from "./pages/FluxoCaixa";
 import ImportarPdf from "./pages/ImportarPdf";
+import MetasAnuais from "./pages/MetasAnuais";
 import { AuthProvider } from "./hooks/useAuth";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { PageTitleProvider } from "./hooks/usePageTitle";
@@ -60,6 +61,7 @@ const App = () => (
                   <Route path="/recebimentos" element={<Recebimentos />} />
                   <Route path="/marketing" element={<Marketing />} />
                   <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/metas-anuais" element={<MetasAnuais />} />
                   <Route path="/relatorios" element={<Relatorios />} />
                 </Route>
                 
