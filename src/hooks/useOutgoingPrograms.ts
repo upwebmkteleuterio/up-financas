@@ -46,7 +46,13 @@ export function useOutgoingPrograms() {
       const { error } = await request;
       if (error) throw error;
     },
-    onSuccess: () => client.invalidateQueries({ queryKey: PROGRAMS_KEY }),
+    onSuccess: async () => {
+      if (!user) return;
+      await Promise.all([
+        client.invalidateQueries({ queryKey: [...PROGRAMS_KEY, user.id], refetchType: "all" }),
+        client.invalidateQueries({ queryKey: [...OCCURRENCES_KEY, user.id], refetchType: "all" }),
+      ]);
+    },
     onError: error => showError(error.message),
   });
   const saveProgram = useCallback((program: Partial<OutgoingProgram> & Pick<OutgoingProgram, "name" | "kind" | "frequency">) => save.mutate(program), [save]);
