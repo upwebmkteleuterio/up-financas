@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { ChevronLeft, ChevronRight, Target } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { ChevronLeft, ChevronRight, Pencil, Target } from "lucide-react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAnnualMonthlyGoals, useMonthlyGoals } from "@/hooks/useMonthlyGoals";
+import { useCurrencyInput } from "@/hooks/useCurrencyInput";
 import { getMonthReference } from "@/types/monthlyGoals";
 
 const formatCurrency = (value: number) =>
@@ -23,44 +24,75 @@ function AnnualGoalRow({
   isSaving: boolean;
   onSave: (value: number, reference: string) => Promise<unknown>;
 }) {
-  const [value, setValue] = useState(month.hasGoal ? String(month.targetValue) : "");
+  const [isEditing, setIsEditing] = useState(false);
+  const { displayValue, numericValue, handleChange, setNumericValue } = useCurrencyInput(0);
 
-  useEffect(() => {
-    setValue(month.hasGoal ? String(month.targetValue) : "");
-  }, [month.targetValue, month.hasGoal]);
+  const startEditing = () => {
+    setNumericValue(month.hasGoal ? month.targetValue : 0);
+    setIsEditing(true);
+  };
+
+  const cancelEditing = () => {
+    setNumericValue(month.hasGoal ? month.targetValue : 0);
+    setIsEditing(false);
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const parsed = Number(value);
-    if (value.trim() === "" || !Number.isFinite(parsed) || parsed < 0) return;
-    await onSave(parsed, month.monthReference);
+    if (!Number.isFinite(numericValue) || numericValue < 0) return;
+    try {
+      await onSave(numericValue, month.monthReference);
+      setIsEditing(false);
+    } catch {
+      // O hook de persistência já apresenta o erro ao usuário.
+    }
   };
 
   return (
     <TableRow>
       <TableCell className="font-medium capitalize">{month.monthLabel}</TableCell>
       <TableCell>
-        {isEditable ? (
-          <form className="flex min-w-[220px] items-center gap-2" onSubmit={handleSubmit}>
-            <Label className="sr-only" htmlFor={`goal-${month.monthReference}`}>Meta mensal</Label>
-            <Input
-              id={`goal-${month.monthReference}`}
-              type="number"
-              min="0"
-              step="0.01"
-              value={value}
-              onChange={(event) => setValue(event.target.value)}
-              placeholder="Definir meta"
-              aria-label={`Meta para ${month.monthLabel}`}
-              disabled={isSaving}
-              className="max-w-40"
-            />
-            <Button type="submit" size="sm" disabled={isSaving || value.trim() === ""}>
-              Salvar
+        {isEditable && isEditing ? (
+          <form className="flex min-w-[260px] items-center gap-2" onSubmit={handleSubmit}>
+            <Label className="sr-only" htmlFor={`goal-${month.monthReference}`}>Meta mensal para {month.monthLabel}</Label>
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
+              <Input
+                id={`goal-${month.monthReference}`}
+                value={displayValue}
+                onChange={handleChange}
+                inputMode="numeric"
+                aria-label={`Meta para ${month.monthLabel}`}
+                disabled={isSaving}
+                className="max-w-40 pl-10"
+              />
+            </div>
+            <Button type="submit" size="sm" disabled={isSaving}>
+              {isSaving ? "Salvando..." : "Salvar"}
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={cancelEditing} disabled={isSaving}>
+              Cancelar
             </Button>
           </form>
         ) : (
-          <span>{month.hasGoal ? formatCurrency(month.targetValue) : "—"}</span>
+          <div className="group flex min-h-9 items-center gap-2">
+            <span className={month.hasGoal ? "" : "text-sm text-muted-foreground"}>
+              {month.hasGoal ? formatCurrency(month.targetValue) : "Definir meta"}
+            </span>
+            {isEditable && (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                aria-label={`Editar meta de ${month.monthLabel}`}
+                title={`Editar meta de ${month.monthLabel}`}
+                onClick={startEditing}
+                className="h-8 w-8 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+              >
+                <Pencil className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            )}
+          </div>
         )}
       </TableCell>
       <TableCell>{formatCurrency(month.salesValue)}</TableCell>
