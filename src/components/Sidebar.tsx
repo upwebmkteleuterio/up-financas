@@ -156,25 +156,43 @@ const Sidebar: React.FC<SidebarProps> = ({
       ) : (
       <div className="flex-grow overflow-y-auto pr-1">
         <nav className="space-y-1">
-          {!isCollapsed && (
-            <h2 className="text-xs font-semibold uppercase text-gray-500 mb-2 px-3">
-              Menu Principal
-            </h2>
-          )}
-          <NavItem to="/dashboard" icon={<LayoutDashboard className="w-5 h-5" />} label="Dashboard" isCollapsed={isCollapsed} />
-          <NavItem to="/financeiro" icon={<DollarSign className="w-5 h-5" />} label="Financeiro" isCollapsed={isCollapsed} />
-          <NavItem to="/fundo-caixa" icon={<Shield className="w-5 h-5" />} label="Fundo de Caixa" isCollapsed={isCollapsed} />
-          <NavItem to="/vendas" icon={<ShoppingBag className="w-5 h-5" />} label="Vendas" isCollapsed={isCollapsed} />
-          <NavItem to="/contratos" icon={<FileText className="w-5 h-5" />} label="Contratos" isCollapsed={isCollapsed} />
-          <NavItem to="/recebimentos" icon={<Wallet className="w-5 h-5" />} label="Recebimentos" isCollapsed={isCollapsed} />
-          <NavItem to="/proventos" icon={<Calculator className="w-5 h-5" />} label="Gestão de Proventos" isCollapsed={isCollapsed} />
-          <NavItem to="/marketing" icon={<Megaphone className="w-5 h-5" />} label="Marketing" isCollapsed={isCollapsed} />
-          <NavItem to="/servicos" icon={<Briefcase className="w-5 h-5" />} label="Gestão de Soluções" isCollapsed={isCollapsed} />
-          <NavItem to="/programacao-saidas" icon={<CalendarClock className="w-5 h-5" />} label="Programação Saídas" isCollapsed={isCollapsed} />
-          <NavItem to="/saidas" icon={<CircleDollarSign className="w-5 h-5" />} label="Saídas" isCollapsed={isCollapsed} />
-          <NavItem to="/fluxo-caixa" icon={<ChartNoAxesCombined className="w-5 h-5" />} label="Fluxo de Caixa" isCollapsed={isCollapsed} />
-          <NavItem to="/saques" icon={<Users className="w-5 h-5" />} label="Gestão de Saques" isCollapsed={isCollapsed} />
-          <NavItem to="/relatorios" icon={<FileText className="w-5 h-5" />} label="Relatórios" isCollapsed={isCollapsed} />
+          <section>
+            {!isCollapsed && (
+              <h2 className="text-xs font-semibold uppercase text-gray-500 mb-2 px-3">
+                Menu Principal
+              </h2>
+            )}
+            <NavItem to="/dashboard" icon={<LayoutDashboard className="w-5 h-5" />} label="Dashboard" isCollapsed={isCollapsed} />
+            <NavItem to="/financeiro" icon={<DollarSign className="w-5 h-5" />} label="Financeiro" isCollapsed={isCollapsed} />
+            <NavItem to="/fundo-caixa" icon={<Shield className="w-5 h-5" />} label="Fundo de Caixa" isCollapsed={isCollapsed} />
+          </section>
+
+          <section className="mt-3 border-t border-sidebar-border pt-3">
+            {!isCollapsed && <h2 className="text-xs font-semibold uppercase text-gray-500 mb-2 px-3">Vendas e recebimentos</h2>}
+            <NavItem to="/vendas" icon={<ShoppingBag className="w-5 h-5" />} label="Vendas" isCollapsed={isCollapsed} />
+            <NavItem to="/contratos" icon={<FileText className="w-5 h-5" />} label="Contratos" isCollapsed={isCollapsed} />
+            <NavItem to="/recebimentos" icon={<Wallet className="w-5 h-5" />} label="Recebimentos" isCollapsed={isCollapsed} />
+          </section>
+
+          <section className="mt-3 border-t border-sidebar-border pt-3">
+            {!isCollapsed && <h2 className="text-xs font-semibold uppercase text-gray-500 mb-2 px-3">Saídas e fluxo</h2>}
+            <NavItem to="/programacao-saidas" icon={<CalendarClock className="w-5 h-5" />} label="Programação Saídas" isCollapsed={isCollapsed} />
+            <NavItem to="/saidas" icon={<CircleDollarSign className="w-5 h-5" />} label="Saídas" isCollapsed={isCollapsed} />
+            <NavItem to="/fluxo-caixa" icon={<ChartNoAxesCombined className="w-5 h-5" />} label="Fluxo de Caixa" isCollapsed={isCollapsed} />
+          </section>
+
+          <section className="mt-3 border-t border-sidebar-border pt-3">
+            {!isCollapsed && <h2 className="text-xs font-semibold uppercase text-gray-500 mb-2 px-3">Proventos e marketing</h2>}
+            <NavItem to="/proventos" icon={<Calculator className="w-5 h-5" />} label="Gestão de Proventos" isCollapsed={isCollapsed} />
+            <NavItem to="/marketing" icon={<Megaphone className="w-5 h-5" />} label="Marketing" isCollapsed={isCollapsed} />
+          </section>
+
+          <section className="mt-3 border-t border-sidebar-border pt-3">
+            {!isCollapsed && <h2 className="text-xs font-semibold uppercase text-gray-500 mb-2 px-3">Gestão</h2>}
+            <NavItem to="/servicos" icon={<Briefcase className="w-5 h-5" />} label="Gestão de Soluções" isCollapsed={isCollapsed} />
+            <NavItem to="/saques" icon={<Users className="w-5 h-5" />} label="Gestão de Saques" isCollapsed={isCollapsed} />
+            <NavItem to="/relatorios" icon={<FileText className="w-5 h-5" />} label="Relatórios" isCollapsed={isCollapsed} />
+          </section>
         </nav>
 
         <div className="mt-4 pt-4 border-t border-sidebar-border space-y-1">
