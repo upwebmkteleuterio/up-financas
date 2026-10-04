@@ -8,13 +8,14 @@ import FilterDropdown, { FilterPeriod } from "@/components/FilterDropdown";
 import SearchInput from "@/components/SearchInput";
 import OutgoingProgramFormDialog from "@/components/OutgoingProgramFormDialog";
 import { useOutgoingPrograms } from "@/hooks/useOutgoingPrograms";
-import { OutgoingProgram } from "@/types/finance";
+import { OutgoingKind, OutgoingProgram } from "@/types/finance";
 import { Banknote, BriefcaseBusiness, CircleDollarSign, Plus, Wallet } from "lucide-react";
 import { createLocalDateFromISO } from "@/lib/utils";
 
 const labelKind = (kind: string) => ({ cost: "Custo", expense: "Gasto", profit: "Saque de Lucro", cash_reserve: "Fundo de Caixa" }[kind] || kind);
 const currency = (v?: number | null) => v == null ? "Sem valor" : new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
-const kindIcon = (kind: string) => kind === "cost" ? BriefcaseBusiness : kind === "profit" ? CircleDollarSign : kind === "cash_reserve" ? Wallet : Banknote;
+const kindIcon = (kind: OutgoingKind) => kind === "cost" ? BriefcaseBusiness : kind === "profit" ? CircleDollarSign : kind === "cash_reserve" ? Wallet : Banknote;
+const kindColors = (kind: OutgoingKind) => kind === "cost" ? { background: "bg-rose-900/40", icon: "text-rose-400" } : kind === "expense" ? { background: "bg-red-900/40", icon: "text-red-400" } : kind === "profit" ? { background: "bg-purple-900/40", icon: "text-purple-400" } : { background: "bg-blue-900/40", icon: "text-blue-400" };
 function targetBounds(period: FilterPeriod, custom: { start: Date | undefined; end: Date | undefined }) {
   const now = new Date();
   if (period === "custom" && custom.start && custom.end) return { start: custom.start, end: custom.end };
@@ -41,13 +42,15 @@ export default function ProgramacaoSaidas() {
   const [search, setSearch] = useState("");
   const [period, setPeriod] = useState<FilterPeriod>(`month_${new Date().getMonth()}` as FilterPeriod);
   const [range, setRange] = useState<{start: Date | undefined; end: Date | undefined}>({ start: undefined, end: undefined });
-  const [status, setStatus] = useState<"all" | "active" | "inactive">("all");
+  const [status, setStatus] = useState<"active" | "inactive">("active");
+  const [kind, setKind] = useState<OutgoingKind | "all">("all");
   const bounds = targetBounds(period, range);
   const filtered = useMemo(() => programs.filter(p =>
     `${p.name} ${p.description || ""}`.toLowerCase().includes(search.toLowerCase())
     && occursInRange(p, bounds)
-    && (status === "all" || p.isActive === (status === "active"))
-  ), [programs, search, period, range.start?.getTime(), range.end?.getTime(), status]);
+    && p.isActive === (status === "active")
+    && (kind === "all" || p.kind === kind)
+  ), [programs, search, period, range.start?.getTime(), range.end?.getTime(), status, kind]);
 
   return <Layout pageTitle="Programação Saídas" pageSubtitle="Regras de custos, gastos e demais saídas previstas.">
     <div className="space-y-6">
@@ -57,25 +60,29 @@ export default function ProgramacaoSaidas() {
       <Card className="border-sidebar-border bg-sidebar text-sidebar-foreground">
         <CardHeader className="p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><SearchInput value={search} onChange={setSearch} placeholder="Buscar programação..."/><FilterDropdown activeFilter={period} setActiveFilter={setPeriod} customDateRange={range} setCustomDateRange={setRange}/></div>
           <div className="flex flex-wrap gap-2 pt-3" role="group" aria-label="Filtrar programações por status">
-            {([{ value: "all", label: "Todas" }, { value: "active", label: "Ativas" }, { value: "inactive", label: "Inativas" }] as const).map(tab => <Button key={tab.value} type="button" aria-pressed={status === tab.value} variant="outline" className={`border-sidebar-border bg-sidebar-accent/50 text-sidebar-primary-foreground ${status === tab.value ? "border-blue-500 text-blue-400" : ""}`} onClick={() => setStatus(tab.value)}>{tab.label}</Button>)}
+            {([{ value: "active", label: "Ativas" }, { value: "inactive", label: "Inativas" }] as const).map(tab => <Button key={tab.value} type="button" aria-pressed={status === tab.value} variant="outline" className={`border-sidebar-border bg-sidebar-accent/50 text-sidebar-primary-foreground ${status === tab.value ? "border-blue-500 text-blue-400" : ""}`} onClick={() => setStatus(tab.value)}>{tab.label}</Button>)}
+          </div>
+          <div className="flex flex-wrap gap-2 pt-2" role="group" aria-label="Filtrar programações por tipo">
+            {([{ value: "all", label: "Todos" }, { value: "cost", label: "Custos" }, { value: "expense", label: "Gastos" }, { value: "profit", label: "Saques de Lucro" }, { value: "cash_reserve", label: "Fundo de Caixa" }] as const).map(tab => <Button key={tab.value} type="button" aria-pressed={kind === tab.value} variant="outline" className={`border-sidebar-border bg-sidebar-accent/50 text-sidebar-primary-foreground ${kind === tab.value ? "border-blue-500 text-blue-400" : ""}`} onClick={() => setKind(tab.value)}>{tab.label}</Button>)}
           </div>
           <CardTitle className="pt-3 text-xl font-bold">Programações cadastradas ({filtered.length})</CardTitle>
         </CardHeader>
         <CardContent className="p-0"><div className="space-y-1">
           {filtered.map((program: OutgoingProgram) => {
             const Icon = kindIcon(program.kind);
+            const colors = kindColors(program.kind);
             const schedule = program.frequency === "none" ? "Somente categoria" : program.frequency === "once" ? "Avulsa" : program.frequency === "count" ? `${program.repeatCount} ocorrências mensais` : "Mensal contínua";
             return <div key={program.id} className="flex flex-col border-b border-sidebar-border transition-colors hover:bg-sidebar-accent/30 sm:flex-row sm:items-stretch">
               <OutgoingProgramFormDialog initial={program} trigger={
                 <button type="button" className="group flex min-w-0 flex-1 cursor-pointer flex-col justify-between gap-3 p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:flex-row sm:items-center">
                   <div className="flex min-w-0 flex-1 items-center gap-4">
-                    <div className="shrink-0 rounded-lg bg-blue-900/40 p-2"><Icon className="h-5 w-5 text-blue-400" /></div>
+                    <div className={`shrink-0 rounded-lg p-2 ${colors.background}`}><Icon className={`h-5 w-5 ${colors.icon}`} /></div>
                     <div className="flex min-w-0 flex-col"><div className="flex flex-wrap items-center gap-2"><span className="truncate font-semibold text-sidebar-primary-foreground">{program.name}</span><span className="rounded bg-sidebar-accent/70 px-2 py-0.5 text-xs text-gray-400">{labelKind(program.kind)}</span></div>
                       <span className="mt-1 text-xs text-gray-400">{program.description || "Sem descrição"}</span>
                     </div>
                   </div>
                   <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:justify-end">
-                    <div className="flex flex-col sm:items-end"><strong className="whitespace-nowrap text-sidebar-primary-foreground">{currency(program.value)}</strong><span className="mt-1 text-xs text-gray-400">{schedule}{program.startDate && program.dueDay ? ` · Início ${format(createLocalDateFromISO(program.startDate), "dd/MM/yyyy")} · vence dia ${program.dueDay}` : ""}</span></div>
+                    <div className="flex flex-col sm:items-end"><strong className={`whitespace-nowrap ${colors.icon}`}>{currency(program.value)}</strong><span className="mt-1 text-xs text-gray-400">{schedule}{program.startDate && program.dueDay ? ` · Início ${format(createLocalDateFromISO(program.startDate), "dd/MM/yyyy")} · vence dia ${program.dueDay}` : ""}</span></div>
                   </div>
                 </button>
               } />
