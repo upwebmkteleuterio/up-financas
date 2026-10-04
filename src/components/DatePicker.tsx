@@ -16,14 +16,16 @@ interface DatePickerProps {
   date: Date | undefined;
   setDate: (date: Date | undefined) => void;
   placeholder?: string;
-  disabled?: boolean; // Adicionando disabled
+  disabled?: boolean;
+  minDate?: Date;
 }
 
-export function DatePicker({ date, setDate, placeholder = "Selecione a data", disabled = false }: DatePickerProps) {
+export function DatePicker({ date, setDate, placeholder = "Selecione a data", disabled = false, minDate }: DatePickerProps) {
   return (
     <Popover>
       <PopoverTrigger asChild>
         <Button
+          type="button"
           variant={"outline"}
           className={cn(
             "w-full justify-start text-left font-normal border-border bg-input hover:bg-input/90", // Adicionado bg-input
@@ -52,6 +54,7 @@ export function DatePicker({ date, setDate, placeholder = "Selecione a data", di
           locale={ptBR}
           // MELHORIA: Garante que o calendário abra no mês da data selecionada
           defaultMonth={date}
+          disabled={minDate ? { before: minDate } : undefined}
         />
       </PopoverContent>
     </Popover>

@@ -1,8 +1,11 @@
 import { memo, useEffect, useState } from "react";
+import { format } from "date-fns";
 import { ArrowDown, ArrowUp, FileText, Loader2, MoreHorizontal, Save, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { DatePicker } from "@/components/DatePicker";
+import { createLocalDateFromISO } from "@/lib/utils";
 
 import {
     Dialog,
@@ -229,13 +232,9 @@ const PdfImportItemRow = memo((
                                 value: event.target.value
                             })}
                             onBlur={save} /></div>
-                    <div className="space-y-2"><Label>Data</Label><Input
-                            type="date"
-                            value={localDraft.date}
-                            onChange={event => patch({
-                                date: event.target.value
-                            })}
-                            onBlur={save} /></div>
+                    <div className="space-y-2"><Label>Data</Label><DatePicker
+                            date={localDraft.date ? createLocalDateFromISO(localDraft.date) : undefined}
+                            setDate={date => date && changeAndSave({ date: format(date, "yyyy-MM-dd") })} /></div>
                 </div>
                 <div
                     className="flex flex-wrap items-center justify-end gap-2 border-t border-border/70 pt-3">

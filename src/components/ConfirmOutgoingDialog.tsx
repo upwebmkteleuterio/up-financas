@@ -11,6 +11,7 @@ import { useCurrencyInput } from "@/hooks/useCurrencyInput";
 import { OutgoingOccurrence, OutgoingProgram, PaymentMethod } from "@/types/finance";
 import { useOutgoingOccurrences } from "@/hooks/useOutgoingPrograms";
 import { createLocalDateFromISO } from "@/lib/utils";
+import { DatePicker } from "@/components/DatePicker";
 import { showError } from "@/utils/toast";
 
 export default function ConfirmOutgoingDialog({ occurrence, program, nextDueDate, trigger }: { occurrence: OutgoingOccurrence; program: OutgoingProgram; nextDueDate?: string; trigger: React.ReactNode }) {
@@ -44,12 +45,12 @@ export default function ConfirmOutgoingDialog({ occurrence, program, nextDueDate
     <DialogHeader><DialogTitle className="flex items-center gap-2 text-green-500"><CheckCircle className="h-5 w-5"/>Confirmar pagamento</DialogTitle><DialogDescription>{program.name} · previsto {formatCurrency}</DialogDescription></DialogHeader>
     <form onSubmit={submit} className="space-y-4">
       <div className="space-y-2"><Label>Valor real</Label><Input className="bg-input" inputMode="decimal" value={`R$ ${displayValue}`} onChange={handleChange} required /></div>
-      <div className="space-y-2"><Label>Data do pagamento</Label><Input className="bg-input" type="date" value={actualDate} onChange={e => setActualDate(e.target.value)} required /></div>
+      <div className="space-y-2"><Label>Data do pagamento</Label><DatePicker date={createLocalDateFromISO(actualDate)} setDate={date => date && setActualDate(format(date, "yyyy-MM-dd"))} /></div>
       <div className="space-y-2"><Label>Forma de pagamento</Label><Select value={method} onValueChange={(v: PaymentMethod) => setMethod(v)}><SelectTrigger className="bg-input"><SelectValue /></SelectTrigger><SelectContent>{(["Pix", "Parcelado", "Dinheiro", "Cartão", "Transferência"] as PaymentMethod[]).map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select></div>
       <div className="space-y-2"><Label>Descrição da transação</Label><Input className="bg-input" value={description} onChange={e => setDescription(e.target.value)} /></div>
       {partial && <div className="space-y-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-4"><p className="text-sm">Saldo restante: R$ {(occurrence.scheduledValue - numericValue).toFixed(2)}</p>
         <RadioGroup value={partialAction} onValueChange={(v: "new_date" | "add_to_next") => setPartialAction(v)}><div className="flex items-center gap-2"><RadioGroupItem value="new_date" id="residual-new"/><Label htmlFor="residual-new">Criar resíduo em nova data</Label></div><div className="flex items-center gap-2"><RadioGroupItem value="add_to_next" id="residual-next" disabled={!nextDueDate}/><Label htmlFor="residual-next" className={!nextDueDate ? "text-muted-foreground" : ""}>Somar à próxima ocorrência existente {!nextDueDate && "(indisponível)"}</Label></div></RadioGroup>
-        {partialAction === "new_date" && <div className="space-y-2"><Label>Vencimento do resíduo</Label><Input className="bg-input" type="date" min={earliestResidualDate} value={residualDate} onChange={e => setResidualDate(e.target.value)} required />{residualDate && residualDate <= actualDate && <p className="text-sm text-destructive">A data do resíduo deve ser posterior ao pagamento.</p>}</div>}
+        {partialAction === "new_date" && <div className="space-y-2"><Label>Vencimento do resíduo</Label><DatePicker date={residualDate ? createLocalDateFromISO(residualDate) : undefined} setDate={date => date && setResidualDate(format(date, "yyyy-MM-dd"))} minDate={createLocalDateFromISO(earliestResidualDate)} />{residualDate && residualDate <= actualDate && <p className="text-sm text-destructive">A data do resíduo deve ser posterior ao pagamento.</p>}</div>}
       </div>}
       <DialogFooter><Button type="submit" disabled={saving || numericValue <= 0 || invalidResidualDate}><CalendarDays className="mr-2 h-4 w-4"/>{saving ? "Confirmando..." : "Confirmar pagamento"}</Button></DialogFooter>
     </form>
