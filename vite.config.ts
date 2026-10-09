@@ -18,6 +18,8 @@ export default defineConfig(() => ({
       workbox: {
         // Cache de ativos estáticos
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // O bundle principal passa do limite padrão de 2 MiB do Workbox
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         // Garante que a navegação funcione offline
         navigateFallback: '/index.html',
       },

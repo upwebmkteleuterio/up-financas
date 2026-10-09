@@ -12,6 +12,22 @@ import { parseModelResponse, sanitizeVisibleMessage, isRecord } from "./protocol
 import { executeTool } from "./tools.ts";
 
 const MODEL = Deno.env.get("DEEPSEEK_MODEL") || "deepseek-flash";
+const MODEL_MAX_TOKENS = 8000;
+const MAX_MODEL_ATTEMPTS = 2;
+const MODEL_RETRY_DELAY_MS = 400;
+
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const describeError = (error: unknown) => error instanceof Error ? error.message : String(error);
+
+const isRetryableModelError = (error: unknown) => {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status !== "number" || status === 408 || status === 409 || status === 429 || status >= 500;
+};
+
+const contentPreview = (value: unknown) =>
+  typeof value === "string" ? value.replace(/\s+/g, " ").slice(0, 300) : "";
+
 const DEEPSEEK_TOOLS = [
   {
     type: "function" as const,
@@ -101,13 +117,6 @@ function appendAssistantMessage(conversation: ModelMessage[], message: Completio
   conversation.push(assistantMessage);
 }
 
-function parseFinalResponse(content: unknown): ModelResponse {
-  if (typeof content !== "string") throw new Error("Resposta estruturada ausente.");
-  const parsed = parseModelResponse(content);
-  if (!parsed) throw new Error("Resposta estruturada inválida.");
-  return parsed;
-}
-
 export async function askModel(
   supabase: Supabase,
   userId: string,
@@ -129,34 +138,84 @@ export async function askModel(
 
   for (let turn = 0; turn <= MAX_TOOL_CALLS; turn += 1) {
     const phase = turn === 0 ? "model_request" : "follow_up";
-    const modelStartedAt = performance.now();
-    let completion;
-    try {
-      completion = await client.chat.completions.create({
-        model: MODEL,
-        messages: conversation as never,
-        tools: DEEPSEEK_TOOLS,
-        tool_choice: "auto",
-        response_format: { type: "json_object" },
-        max_tokens: 2000,
-        extra_body: { thinking: { type: "enabled" } },
-      } as never);
-      recordStage(diagnostics, phase, "ok", modelStartedAt);
-    } catch {
-      recordStage(diagnostics, phase, "error", modelStartedAt);
-      logError(requestId, phase === "model_request" ? "model request failed" : "follow-up request failed");
-      throw new Error("Não foi possível processar a resposta do assistente.");
+    let rawMessage: CompletionMessage | null = null;
+    let toolCalls: ModelToolCall[] = [];
+    let parsed: ModelResponse | null = null;
+
+    for (let attempt = 1; attempt <= MAX_MODEL_ATTEMPTS; attempt += 1) {
+      const attemptStartedAt = performance.now();
+      let completion;
+      try {
+        completion = await client.chat.completions.create({
+          model: MODEL,
+          messages: conversation as never,
+          tools: DEEPSEEK_TOOLS,
+          tool_choice: "auto",
+          response_format: { type: "json_object" },
+          max_tokens: MODEL_MAX_TOKENS,
+          extra_body: { thinking: { type: "enabled" } },
+        } as never);
+      } catch (error) {
+        recordStage(diagnostics, phase, "error", attemptStartedAt, "MODEL_REQUEST_FAILED");
+        logError(requestId, `${phase} tentativa ${attempt} falhou: ${describeError(error)}`);
+        if (attempt < MAX_MODEL_ATTEMPTS && isRetryableModelError(error)) {
+          await delay(MODEL_RETRY_DELAY_MS * attempt);
+          continue;
+        }
+        throw new Error("Não foi possível processar a resposta do assistente.");
+      }
+
+      const message = completion.choices[0]?.message as unknown as CompletionMessage | undefined;
+      if (!message) {
+        recordStage(diagnostics, phase, "error", attemptStartedAt, "MODEL_EMPTY_RESPONSE");
+        logError(requestId, `${phase} tentativa ${attempt}: resposta vazia do modelo`);
+        if (attempt < MAX_MODEL_ATTEMPTS) {
+          await delay(MODEL_RETRY_DELAY_MS * attempt);
+          continue;
+        }
+        throw new Error("Resposta do assistente ausente.");
+      }
+
+      let calls: ModelToolCall[];
+      try {
+        calls = extractToolCalls(message);
+      } catch {
+        recordStage(diagnostics, phase, "error", attemptStartedAt, "MODEL_INVALID_TOOL_CALL");
+        logError(requestId, `${phase} tentativa ${attempt}: chamada de ferramenta inválida`);
+        if (attempt < MAX_MODEL_ATTEMPTS) {
+          await delay(MODEL_RETRY_DELAY_MS * attempt);
+          continue;
+        }
+        throw new Error("Resposta de ferramenta inválida.");
+      }
+
+      if (calls.length > 0) {
+        recordStage(diagnostics, phase, "ok", attemptStartedAt);
+        rawMessage = message;
+        toolCalls = calls;
+        break;
+      }
+
+      const finishReason = completion.choices[0]?.finish_reason;
+      const candidate = typeof message.content === "string" ? parseModelResponse(message.content) : null;
+      if (candidate) {
+        recordStage(diagnostics, phase, "ok", attemptStartedAt);
+        rawMessage = message;
+        toolCalls = [];
+        parsed = candidate;
+        break;
+      }
+
+      recordStage(diagnostics, phase, "error", attemptStartedAt, finishReason === "length" ? "RESPONSE_TRUNCATED" : "RESPONSE_INVALID");
+      logError(requestId, `${phase} tentativa ${attempt}: resposta inválida (finish_reason=${finishReason ?? "desconhecido"}, content="${contentPreview(message.content)}")`);
+      if (attempt < MAX_MODEL_ATTEMPTS) {
+        await delay(MODEL_RETRY_DELAY_MS * attempt);
+        continue;
+      }
+      throw new Error("Resposta estruturada inválida.");
     }
 
-    const rawMessage = completion.choices[0]?.message as unknown as CompletionMessage | undefined;
-    if (!rawMessage) throw new Error("Resposta do assistente ausente.");
-    let toolCalls: ModelToolCall[];
-    try {
-      toolCalls = extractToolCalls(rawMessage);
-    } catch {
-      logError(requestId, "invalid tool call response");
-      throw new Error("Resposta de ferramenta inválida.");
-    }
+    if (!rawMessage) throw new Error("O assistente não concluiu a resposta.");
 
     if (toolCalls.length > 0) {
       if (turn >= MAX_TOOL_CALLS || toolCallsExecuted + toolCalls.length > MAX_TOOL_CALLS) {
@@ -181,7 +240,8 @@ export async function askModel(
       continue;
     }
 
-    const parsed = parseFinalResponse(rawMessage.content);
+    if (!parsed) throw new Error("Resposta estruturada ausente.");
+
     if (parsed.kind === "message") {
       if (toolCallsExecuted === 0) recordStage(diagnostics, "tool_execution", "skipped", performance.now());
       recordStage(diagnostics, "validation", "skipped", performance.now());

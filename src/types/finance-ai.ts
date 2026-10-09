@@ -58,6 +58,7 @@ export interface AiMissingByItem {
 export interface AiChatResponse {
   kind: "message" | "proposal" | "missing" | "error";
   message: string;
+  code?: string;
   requestId?: string;
   diagnostics?: AiDiagnostics;
   missingFields?: string[];

@@ -26,36 +26,54 @@ export function sanitizeChatRequest(input: unknown): ChatRequest {
   };
 }
 
-export function parseModelResponse(content: string): ModelResponse | null {
+const toModelResponse = (parsed: Record<string, unknown>): ModelResponse | null => {
+  const kind = parsed.kind;
+  if (kind !== "message" && kind !== "proposal" && kind !== "missing") return null;
+  return {
+    kind,
+    message: typeof parsed.message === "string" ? parsed.message : undefined,
+    missingFields: Array.isArray(parsed.missingFields) ? parsed.missingFields.filter((field): field is string => typeof field === "string").slice(0, 8) : undefined,
+    missingByItem: Array.isArray(parsed.missingByItem)
+      ? parsed.missingByItem
+        .filter(isRecord)
+        .map((item, index) => ({
+          index: typeof item.index === "number" && Number.isInteger(item.index) && item.index >= 0 ? item.index : index,
+          label: typeof item.label === "string" && item.label.trim() ? item.label.trim().slice(0, 120) : `Item ${index + 1}`,
+          missingFields: Array.isArray(item.missingFields)
+            ? item.missingFields.filter((field): field is string => typeof field === "string").slice(0, 8)
+            : [],
+        }))
+        .slice(0, 50)
+      : undefined,
+    categoryOptions: Array.isArray(parsed.categoryOptions) ? parsed.categoryOptions.filter((option): option is string => typeof option === "string").slice(0, 50) : undefined,
+    drafts: Array.isArray(parsed.drafts)
+      ? parsed.drafts.slice(0, 50).map((draft) => isRecord(draft) ? draft as TransactionDraft : {})
+      : undefined,
+  };
+};
+
+const parseJsonObject = (value: string): Record<string, unknown> | null => {
   try {
-    const parsed: unknown = JSON.parse(content.replace(/^```json\s*|\s*```$/g, ""));
-    if (!isRecord(parsed)) return null;
-    const kind = parsed.kind;
-    if (kind !== "message" && kind !== "proposal" && kind !== "missing") return null;
-    return {
-      kind,
-      message: typeof parsed.message === "string" ? parsed.message : undefined,
-      missingFields: Array.isArray(parsed.missingFields) ? parsed.missingFields.filter((field): field is string => typeof field === "string").slice(0, 8) : undefined,
-      missingByItem: Array.isArray(parsed.missingByItem)
-        ? parsed.missingByItem
-          .filter(isRecord)
-          .map((item, index) => ({
-            index: typeof item.index === "number" && Number.isInteger(item.index) && item.index >= 0 ? item.index : index,
-            label: typeof item.label === "string" && item.label.trim() ? item.label.trim().slice(0, 120) : `Item ${index + 1}`,
-            missingFields: Array.isArray(item.missingFields)
-              ? item.missingFields.filter((field): field is string => typeof field === "string").slice(0, 8)
-              : [],
-          }))
-          .slice(0, 50)
-        : undefined,
-      categoryOptions: Array.isArray(parsed.categoryOptions) ? parsed.categoryOptions.filter((option): option is string => typeof option === "string").slice(0, 50) : undefined,
-      drafts: Array.isArray(parsed.drafts)
-        ? parsed.drafts.slice(0, 50).map((draft) => isRecord(draft) ? draft as TransactionDraft : {})
-        : undefined,
-    };
+    const parsed: unknown = JSON.parse(value);
+    return isRecord(parsed) ? parsed : null;
   } catch {
     return null;
   }
+};
+
+export function parseModelResponse(content: string): ModelResponse | null {
+  const withoutFences = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+  const candidates = [withoutFences];
+  const start = withoutFences.indexOf("{");
+  const end = withoutFences.lastIndexOf("}");
+  if (start >= 0 && end > start) candidates.push(withoutFences.slice(start, end + 1));
+  for (const candidate of candidates) {
+    const parsed = parseJsonObject(candidate);
+    if (!parsed) continue;
+    const response = toModelResponse(parsed);
+    if (response) return response;
+  }
+  return null;
 }
 
 export const sanitizeVisibleMessage = (message: string) => message.replace(/\brascunho(?:s)?\b/gi, "lançamento pronto para confirmação").slice(0, 2000);

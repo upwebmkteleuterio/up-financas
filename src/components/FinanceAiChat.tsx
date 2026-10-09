@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { dispatchTransactionCreated } from "@/lib/transaction-events";
 import { showSuccess } from "@/utils/toast";
 import { DEFAULT_FINANCE_AI_PROMPT } from "@/lib/finance-ai-prompt";
+import { buildVoiceText, endsWithVoiceSendWord, hasImmediateVoiceSendCommand } from "@/lib/voice-commands";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -60,8 +61,11 @@ const initialMessage: AiChatMessage = {
   timestamp: new Date().toISOString(),
 };
 
-const CHAT_TIMEOUT_MESSAGE = "Desculpe, algo deu errado. Tente novamente.";
 const CHAT_TIMEOUT_MS = 45_000;
+const VOICE_SEND_DELAY_MS = 2_000;
+const OFFLINE_MESSAGE = "Você está sem conexão. Verifique sua internet e tente novamente.";
+const TIMEOUT_MESSAGE = "A resposta demorou demais. Tente novamente.";
+const GENERIC_FAILURE_MESSAGE = "Não foi possível processar o pedido. Tente novamente.";
 
 const formatCurrency = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -104,6 +108,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const isLoadingRef = useRef(false);
   const pauseTimerRef = useRef<number | null>(null);
+  const voiceSendTimerRef = useRef<number | null>(null);
   const speechResultsRef = useRef<Map<number, SpeechResult>>(new Map());
   const voiceBaseInputRef = useRef("");
   const messageIdRef = useRef(0);
@@ -112,6 +117,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
 
   useEffect(() => () => {
     if (pauseTimerRef.current !== null) window.clearTimeout(pauseTimerRef.current);
+    if (voiceSendTimerRef.current !== null) window.clearTimeout(voiceSendTimerRef.current);
     const recognition = recognitionRef.current;
     if (recognition) {
       recognition.onresult = null;
@@ -196,15 +202,23 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
       if (invokeError) throw invokeError;
       if (!data) throw new Error("A IA não retornou uma resposta.");
       if (data.kind === "error") {
-        setMessages((current) => [...current, {
-          id: `assistant-${messageIdRef.current++}`,
-          role: "assistant",
-          content: data.message,
-          timestamp: new Date().toISOString(),
-          diagnostics: data.diagnostics,
-          requestId: data.requestId,
-        }]);
-        throw new Error(data.message);
+        if (data.missingByItem?.length) {
+          setMessages((current) => [...current, {
+            id: `assistant-${messageIdRef.current++}`,
+            role: "assistant",
+            content: data.message,
+            timestamp: new Date().toISOString(),
+            diagnostics: data.diagnostics,
+            requestId: data.requestId,
+          }]);
+          return;
+        }
+        if (mode === "execute") {
+          setError(data.message);
+          return;
+        }
+        setRetryMessage(data.message || GENERIC_FAILURE_MESSAGE);
+        return;
       }
       if (mode === "execute") {
         await Promise.all([
@@ -237,12 +251,15 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
       const responseDrafts = data.drafts ?? (data.draft ? [data.draft] : []);
       setDrafts(mode === "execute" ? [] : responseDrafts.map(formatDraftField));
     } catch (caught) {
-      if (caught instanceof Error && caught.name === "FinanceAiChatTimeout" && mode === "chat") {
-        setError(null);
-        setRetryMessage(CHAT_TIMEOUT_MESSAGE);
+      setError(null);
+      if (mode === "execute") {
+        setError(caught instanceof Error ? caught.message : "Não foi possível concluir o lançamento.");
+      } else if (typeof navigator !== "undefined" && !navigator.onLine) {
+        setRetryMessage(OFFLINE_MESSAGE);
+      } else if (caught instanceof Error && caught.name === "FinanceAiChatTimeout") {
+        setRetryMessage(TIMEOUT_MESSAGE);
       } else {
-        setRetryMessage(null);
-        setError(caught instanceof Error ? caught.message : "Não foi possível falar com a IA.");
+        setRetryMessage(GENERIC_FAILURE_MESSAGE);
       }
     } finally {
       isLoadingRef.current = false;
@@ -252,6 +269,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
 
   const stopVoiceRecognitionForSend = () => {
     clearPauseTimer();
+    clearVoiceSendTimer();
     const finalInput = getVoiceInput(true);
     setInput(finalInput);
     const recognition = recognitionRef.current;
@@ -269,10 +287,8 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     return finalInput;
   };
 
-  const sendMessage = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const textSource = recognitionRef.current ? stopVoiceRecognitionForSend() : input;
-    const text = textSource.trim();
+  const submitText = async (rawText: string) => {
+    const text = rawText.trim();
     if (!text || isLoadingRef.current) return;
     const userMessage: AiChatMessage = {
       id: `user-${messageIdRef.current++}`,
@@ -288,6 +304,12 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     await invokeChat("chat", text, undefined, conversation);
   };
 
+  const sendMessage = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const textSource = recognitionRef.current ? stopVoiceRecognitionForSend() : input;
+    await submitText(textSource);
+  };
+
   const retryLastMessage = async () => {
     const text = lastSentMessageRef.current;
     if (!text || isLoadingRef.current) return;
@@ -301,27 +323,50 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     }
   };
 
-  const addAutomaticPeriod = (text: string) => {
-    const trimmedText = text.trim();
-    if (!trimmedText || /[.!?]$/.test(trimmedText)) return trimmedText;
-    return `${trimmedText}.`;
+  const clearVoiceSendTimer = () => {
+    if (voiceSendTimerRef.current !== null) {
+      window.clearTimeout(voiceSendTimerRef.current);
+      voiceSendTimerRef.current = null;
+    }
   };
 
-  const normalizeVoiceTranscript = (text: string) => text
-    .replace(/(^|[^\p{L}])descrição\b\s*:*\s*/giu, "$1Descrição: ")
-    .replace(/(^|[^\p{L}])categoria\b\s*:*\s*/giu, "$1Categoria: ")
-    .replace(/\s{2,}/g, " ")
-    .trim();
+  const getRawVoiceTranscript = () => Array.from(speechResultsRef.current.entries())
+    .sort(([left], [right]) => left - right)
+    .map(([, result]) => result.transcript.trim())
+    .filter(Boolean)
+    .join(" ");
 
   const getVoiceInput = (punctuate: boolean) => {
-    const transcript = Array.from(speechResultsRef.current.entries())
-      .sort(([left], [right]) => left - right)
-      .map(([, result]) => result.transcript.trim())
-      .filter(Boolean)
-      .join(" ");
-    const normalizedTranscript = normalizeVoiceTranscript(transcript);
-    const finalTranscript = punctuate ? addAutomaticPeriod(normalizedTranscript) : normalizedTranscript;
+    const finalTranscript = buildVoiceText(getRawVoiceTranscript(), punctuate);
     return [voiceBaseInputRef.current, finalTranscript].filter(Boolean).join(" ");
+  };
+
+  const sendVoiceTranscript = async () => {
+    clearVoiceSendTimer();
+    const text = buildVoiceText(getRawVoiceTranscript(), true);
+    stopVoiceRecognitionForSend();
+    await submitText(text);
+  };
+
+  const handleVoiceSendCommand = () => {
+    const transcript = getRawVoiceTranscript();
+    if (!transcript) {
+      clearVoiceSendTimer();
+      return;
+    }
+    if (hasImmediateVoiceSendCommand(transcript)) {
+      void sendVoiceTranscript();
+      return;
+    }
+    if (endsWithVoiceSendWord(transcript)) {
+      clearVoiceSendTimer();
+      voiceSendTimerRef.current = window.setTimeout(() => {
+        voiceSendTimerRef.current = null;
+        void sendVoiceTranscript();
+      }, VOICE_SEND_DELAY_MS);
+      return;
+    }
+    clearVoiceSendTimer();
   };
 
   const updateVoiceInput = (punctuate = false) => {
@@ -390,6 +435,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
       updateVoiceInput();
       setSpeechMessage("Ouvindo em português (Brasil)…");
       scheduleSpeechPause();
+      handleVoiceSendCommand();
     };
     recognition.onerror = (event) => {
       if (recognitionRef.current !== recognition) return;

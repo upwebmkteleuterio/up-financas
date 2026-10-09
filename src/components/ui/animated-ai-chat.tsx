@@ -356,7 +356,7 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
                 disabled={isLoading}
                 className="mt-2 border-amber-200/30 bg-transparent text-amber-100 hover:bg-amber-200/10 hover:text-white"
               >
-                Reenviar
+                Tentar novamente
               </Button>
             </motion.div>
           )}

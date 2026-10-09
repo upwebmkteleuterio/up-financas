@@ -30,13 +30,13 @@ Deno.serve(async (request) => {
   };
 
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (request.method !== "POST") return finish({ kind: "error", message: "Método não permitido." }, 405, "error");
+  if (request.method !== "POST") return finish({ kind: "error", code: "METHOD_NOT_ALLOWED", message: "Método não permitido." }, 405, "error");
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const authorization = request.headers.get("Authorization");
-  if (!supabaseUrl || !supabaseAnonKey) return finish({ kind: "error", message: "Configuração do Supabase indisponível." }, 500, "error");
-  if (!authorization?.startsWith("Bearer ")) return finish({ kind: "error", message: "Não autenticado." }, 401, "error");
+  if (!supabaseUrl || !supabaseAnonKey) return finish({ kind: "error", code: "CONFIG_ERROR", message: "Configuração do Supabase indisponível." }, 500, "error");
+  if (!authorization?.startsWith("Bearer ")) return finish({ kind: "error", code: "UNAUTHENTICATED", message: "Não autenticado." }, 401, "error");
   const supabase = createClient(supabaseUrl, supabaseAnonKey, { global: { headers: { Authorization: authorization } } });
 
   try {
@@ -61,12 +61,12 @@ Deno.serve(async (request) => {
       const validationStartedAt = performance.now();
       if (body.confirmed !== true) {
         recordStage(diagnostics, "validation", "error", validationStartedAt);
-        return finish({ kind: "error", message: "A confirmação explícita é necessária para executar o lançamento." }, 400, "error");
+        return finish({ kind: "error", code: "CONFIRMATION_REQUIRED", message: "A confirmação explícita é necessária para executar o lançamento." }, 400, "error");
       }
       const requestedDrafts = body.drafts?.length ? body.drafts : body.draft ? [body.draft] : [];
       if (requestedDrafts.length === 0) {
         recordStage(diagnostics, "validation", "error", validationStartedAt);
-        return finish({ kind: "error", message: "É necessário informar pelo menos um lançamento." }, 400, "error");
+        return finish({ kind: "error", code: "NO_DRAFTS", message: "É necessário informar pelo menos um lançamento." }, 400, "error");
       }
       const normalizedDrafts = requestedDrafts.map((draft) => normalizeDraft(draft, context, false));
       const invalidItems = normalizedDrafts
@@ -84,6 +84,7 @@ Deno.serve(async (request) => {
       if (invalidItems.length > 0) {
         return finish({
           kind: "error",
+          code: "VALIDATION_ERROR",
           message: "Um ou mais lançamentos são inválidos ou estão incompletos.",
           missingByItem: invalidItems,
           categoryOptions: [...new Set(normalizedDrafts.flatMap((normalized) => normalized.options))],
@@ -102,8 +103,8 @@ Deno.serve(async (request) => {
 
     const result = await askModel(supabase, user.id, context, body, customPrompt, requestId, diagnostics);
     return finish(result as unknown as Record<string, unknown>);
-  } catch {
-    logError(requestId, "request failed");
-    return finish({ kind: "error", message: "Não foi possível processar o pedido." }, 200, "error");
+  } catch (error) {
+    logError(requestId, `request failed: ${error instanceof Error ? error.message : String(error)}`);
+    return finish({ kind: "error", code: "INTERNAL_ERROR", message: "Não foi possível processar o pedido." }, 200, "error");
   }
 });
