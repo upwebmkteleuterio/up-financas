@@ -1,7 +1,8 @@
 import { toast } from "sonner";
+import type { ReactNode } from "react";
 
-export const showSuccess = (message: string) => {
-  toast.success(message);
+export const showSuccess = (message: string, description?: ReactNode) => {
+  toast.success(message, description ? { description } : undefined);
 };
 
 export const showError = (message: string) => {

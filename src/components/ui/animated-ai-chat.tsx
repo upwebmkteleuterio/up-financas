@@ -384,7 +384,7 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
                 placeholder="Ex.: lançar saída de R$ 120 de software hoje"
                 rows={1}
                 disabled={isLoading}
-                className={`relative z-10 max-h-40 min-h-10 resize-none overflow-hidden border-0 bg-transparent px-2 py-2 text-sm shadow-none placeholder:text-slate-500 focus-visible:ring-0 ${
+                className={`relative z-10 max-h-40 !min-h-10 resize-none overflow-hidden border-0 bg-transparent px-2 py-2 text-sm shadow-none placeholder:text-slate-500 focus-visible:ring-0 ${
                   isRecording && input.trim() ? "text-transparent caret-white selection:bg-white/20 selection:text-transparent" : "text-white"
                 }`}
                 aria-label="Mensagem para o assistente"

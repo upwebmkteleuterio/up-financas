@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import MobileHeader from "./MobileHeader";
 import { usePageTitle } from "@/hooks/usePageTitle"; // Importando o hook
+import { useFinanceAiChat } from "@/hooks/useFinanceAiChat";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -14,7 +15,7 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children, pageTitle, pageSubtitle = "" }) => {
   const { isCollapsed, toggleSidebar } = useSidebar();
-  const [aiChatOpen, setAiChatOpen] = React.useState(false);
+  const { isOpen: aiChatOpen, toggleChat } = useFinanceAiChat();
   const isMobile = useIsMobile(); // Check if it's mobile
   const { setTitle } = usePageTitle(); // Hook para definir o título
 
@@ -25,7 +26,7 @@ const Layout: React.FC<LayoutProps> = ({ children, pageTitle, pageSubtitle = "" 
   
   // Largura da sidebar: 64 (256px) expandida, 20 (80px) recolhida.
   // O chat ocupa uma largura maior, sem criar uma rota extra.
-  const contentMargin = isMobile ? "ml-0" : (aiChatOpen ? "ml-[26rem]" : (isCollapsed ? "ml-20" : "ml-64"));
+  const contentMargin = isMobile ? "ml-0" : (aiChatOpen ? "ml-[31rem]" : (isCollapsed ? "ml-20" : "ml-64"));
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -37,7 +38,7 @@ const Layout: React.FC<LayoutProps> = ({ children, pageTitle, pageSubtitle = "" 
             isCollapsed={isCollapsed}
             toggleSidebar={toggleSidebar}
             aiChatOpen={aiChatOpen}
-            onToggleAiChat={() => setAiChatOpen((open) => !open)}
+            onToggleAiChat={toggleChat}
           />
         </div>
       )}

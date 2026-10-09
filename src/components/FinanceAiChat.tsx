@@ -234,9 +234,19 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
         const createdCount = typeof data.createdCount === "number" && Number.isFinite(data.createdCount)
           ? Math.max(0, Math.floor(data.createdCount))
           : transactionIds.length;
-        showSuccess(createdCount === 1
-          ? "Lançamento realizado com sucesso!"
-          : `${createdCount} lançamentos realizados com sucesso!`);
+        const executedDrafts = draftsToExecute ?? [];
+        showSuccess(
+          createdCount === 1 ? "Lançamento realizado" : `${createdCount} lançamentos realizados`,
+          executedDrafts.length > 0 ? (
+            <span className="block space-y-0.5">
+              {executedDrafts.map((item, index) => (
+                <span key={`${item.date}-${item.description}-${index}`} className="block">
+                  <strong>{item.type}</strong> · {item.description} · {formatCurrency(Number(item.value))}
+                </span>
+              ))}
+            </span>
+          ) : undefined,
+        );
         executionOperationIdRef.current = null;
       }
       setMessages((current) => [...current, {

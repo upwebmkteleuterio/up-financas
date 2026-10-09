@@ -27,6 +27,8 @@ import { AuthProvider } from "./hooks/useAuth";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { PageTitleProvider } from "./hooks/usePageTitle";
 import { FinancialVisibilityProvider } from "./hooks/useFinancialVisibility";
+import { FinanceAiChatProvider } from "./hooks/useFinanceAiChat";
+import FinanceAiChatHost from "./components/FinanceAiChatHost";
 
 const queryClient = new QueryClient();
 
@@ -39,7 +41,8 @@ const App = () => (
         <AuthProvider>
           <PageTitleProvider>
             <FinancialVisibilityProvider>
-              <Routes>
+              <FinanceAiChatProvider>
+                <Routes>
                 <Route path="/login" element={<Login />} />
                 
                 <Route element={<ProtectedRoute />}>
@@ -66,7 +69,9 @@ const App = () => (
                 </Route>
                 
                 <Route path="*" element={<NotFound />} />
-              </Routes>
+                </Routes>
+                <FinanceAiChatHost />
+              </FinanceAiChatProvider>
             </FinancialVisibilityProvider>
           </PageTitleProvider>
         </AuthProvider>
