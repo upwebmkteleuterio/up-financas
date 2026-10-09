@@ -10,6 +10,7 @@ export function useExpenseCategories() {
     if (b.name === "Outros Gastos") return 1;
     return a.name.localeCompare(b.name);
   }), [outgoingExpenses]);
+  const activeExpenseCategories = useMemo(() => expenseCategories.filter(category => category.isActive), [expenseCategories]);
   const addExpenseCategory = useCallback((name: string) => saveProgram({ name, kind: "expense", frequency: "none", isActive: true }), [saveProgram]);
   const updateExpenseCategory = useCallback((category: ExpenseCategory) => {
     const original = outgoingExpenses.find(program => program.id === category.id);
@@ -20,5 +21,5 @@ export function useExpenseCategories() {
     if (original) return saveProgram({ ...original, isActive: false });
   }, [outgoingExpenses, saveProgram]);
   const getCategoryNameById = useCallback((id: string) => expenseCategories.find(category => category.id === id)?.name, [expenseCategories]);
-  return { expenseCategories: expenseCategories.filter(category => category.isActive), isLoadingCategories: isLoading, addExpenseCategory, updateExpenseCategory, deleteExpenseCategory, getCategoryNameById };
+  return { expenseCategories: activeExpenseCategories, isLoadingCategories: isLoading, addExpenseCategory, updateExpenseCategory, deleteExpenseCategory, getCategoryNameById };
 }

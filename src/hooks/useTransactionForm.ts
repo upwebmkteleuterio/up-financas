@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Transaction, TransactionType, PaymentMethod, subcategories, AccountType } from "@/types/finance";
 import { useToast } from "@/components/ui/use-toast";
 import { useCurrencyInput } from "@/hooks/useCurrencyInput";
@@ -177,19 +177,28 @@ export function useTransactionForm(
     }
   }, [defaultType, formData.type, partners, activeCostCategoryNames, expenseCategoryNames, setNumericValue, defaultAccountType]);
 
+  const wasOpenRef = useRef(false);
+
   useEffect(() => {
-    if (!isOpen) {
-      if (onClose) onClose();
-    } else if (!initialData) {
-      resetForm();
-    } else {
-      const initial = getInitialFormState(initialData, defaultType, partners, defaultAccountType);
-      setFormData(initial);
-      setNumericValue(initialData.value);
-      if (initial.type === "Saída" && defaultAccountType === "main") {
-        setActiveSaidaGroup(determineSaidaGroup(initial.category, saídaCategories));
+    const justOpened = isOpen && !wasOpenRef.current;
+    const justClosed = !isOpen && wasOpenRef.current;
+
+    if (justOpened) {
+      if (initialData) {
+        const initial = getInitialFormState(initialData, defaultType, partners, defaultAccountType);
+        setFormData(initial);
+        setNumericValue(initialData.value);
+        if (initial.type === "Saída" && defaultAccountType === "main") {
+          setActiveSaidaGroup(determineSaidaGroup(initial.category, saídaCategories));
+        }
+      } else {
+        resetForm();
       }
     }
+
+    if (justClosed && onClose) onClose();
+
+    wasOpenRef.current = isOpen;
   }, [isOpen, initialData, defaultType, partners, saídaCategories, setNumericValue, resetForm, onClose, defaultAccountType]);
 
   const handleSubgroupChange = useCallback((group: SaidaGroup) => {
