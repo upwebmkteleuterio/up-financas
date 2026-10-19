@@ -7,6 +7,21 @@ import { showSuccess } from "@/utils/toast";
 import { createLocalDateFromISO } from "@/lib/utils";
 import { isPast, isToday, startOfDay, parseISO, addMonths, format } from "date-fns";
 
+export const getInstallmentReceived = (installment: ContractInstallment): number =>
+  installment.paidValue ?? (installment.isPaid ? installment.value : 0);
+
+export const getInstallmentRemaining = (installment: ContractInstallment): number =>
+  Math.max(0, installment.value - getInstallmentReceived(installment));
+
+export const getContractRemaining = (contract: Contract): number =>
+  (contract.installments || []).reduce((sum, installment) => sum + getInstallmentRemaining(installment), 0);
+
+export const getInstallmentPaidInfo = (installment: ContractInstallment) => {
+  const received = getInstallmentReceived(installment);
+  const original = installment.originalValue ?? installment.value;
+  return { received, original, isPartial: installment.isPaid && received < original };
+};
+
 const TABLE_NAME = "contracts";
 const QUERY_KEY = [TABLE_NAME];
 
@@ -136,10 +151,13 @@ export function useSales() {
     // 1. Atualiza a parcela atual
     updatedInstallments[installmentIndex] = {
         ...installment,
+        // Em recebimento parcial o valor da parcela passa a ser exatamente o que foi
+        // recebido, e o resíduo vira outra parcela. Sem isso a soma das parcelas do
+        // contrato passaria a ser maior que o valor total do contrato.
+        ...(isPartial ? { originalValue: installment.originalValue ?? installment.value } : {}),
+        value: paidValue,
         paidValue: paidValue,
         paidDate: paymentDate.toISOString().split("T")[0],
-        // Se for parcial, mantemos isPaid como false para que ela ainda apareça como pendente ou parcial no sistema
-        // Mas o usuário quer que ela mude de status. Vamos definir que isPaid: true significa que "foi processada"
         isPaid: true
     };
 
@@ -223,20 +241,18 @@ export function useSales() {
     contracts.forEach(c => {
         if (c.isCanceled) return;
 
-        const totalPaid = c.installments.reduce((sum, i) => sum + (i.paidValue || (i.isPaid ? i.value : 0)), 0);
-        const isFinished = (c.totalContractValue - totalPaid) <= 0;
+        const isFinished = getContractRemaining(c) <= 0;
 
         // Se o contrato não está finalizado nem cancelado, ele é ATIVO
         if (!isFinished) {
             c.installments.forEach(i => {
-                if (i.isPaid) {
-                    totalRecebidoAtivos += (i.paidValue || i.value);
-                } else {
-                    totalAReceber += i.value;
+                const received = getInstallmentReceived(i);
+                const remaining = getInstallmentRemaining(i);
+                if (received > 0) totalRecebidoAtivos += received;
+                if (remaining > 0) {
+                    totalAReceber += remaining;
                     const dueDate = createLocalDateFromISO(i.dueDate);
-                    if (isPast(dueDate) && !isToday(dueDate)) {
-                        totalEmAtraso += i.value;
-                    }
+                    if (isPast(dueDate) && !isToday(dueDate)) totalEmAtraso += remaining;
                 }
             });
         }

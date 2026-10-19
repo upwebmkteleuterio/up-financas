@@ -99,6 +99,7 @@ export interface ContractInstallment {
   isPaid: boolean;
   paidValue?: number;
   paidDate?: string;
+  originalValue?: number; // valor original da parcela antes de um recebimento parcial
 }
 
 export interface Contract {

@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { useSales } from "@/hooks/useSales";
+import { getContractRemaining, getInstallmentPaidInfo, useSales } from "@/hooks/useSales";
 import { Contract, ContractInstallment, ContractType } from "@/types/finance";
 import { cn } from "@/lib/utils";
 import { DollarSign, CheckCircle, FileText, XCircle, Clock, TrendingUp } from "lucide-react";
@@ -63,7 +63,7 @@ const InstallmentStatusTag: React.FC<InstallmentStatusTagProps> = ({ installment
     }
     
     if (installment.isPaid) {
-        const isPartial = installment.paidValue !== undefined && installment.paidValue < installment.value;
+        const { isPartial } = getInstallmentPaidInfo(installment);
         if (isPartial) {
             return <span className={cn(baseClasses, "bg-orange-900/50 text-orange-400")}>Pago Parcial</span>;
         }
@@ -87,8 +87,7 @@ interface ContractCardProps {
 }
 
 const ContractCard: React.FC<ContractCardProps> = ({ contract, onEdit, onDelete, onDuplicate, onCancel }) => {
-    const totalPaid = contract.installments.reduce((sum, i) => sum + (i.paidValue || (i.isPaid ? i.value : 0)), 0);
-    const totalRemaining = Math.max(0, contract.totalContractValue - totalPaid);
+    const totalRemaining = getContractRemaining(contract);
     const isFinished = totalRemaining <= 0;
     const isCanceled = contract.isCanceled;
     
@@ -111,10 +110,9 @@ const ContractCard: React.FC<ContractCardProps> = ({ contract, onEdit, onDelete,
             <CardHeader className="p-4 border-b border-sidebar-border flex flex-row items-center justify-between">
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
                     {isCanceled ? <XCircle className="w-6 h-6 text-destructive" /> : <FileText className="w-6 h-6 text-sidebar-primary" />}
-                    <CardTitle className="text-lg font-bold truncate flex-1 min-w-0">{contract.clientName}</CardTitle>
+                    <CardTitle className="text-lg font-bold line-clamp-2 break-words flex-1 min-w-0">{contract.clientName}</CardTitle>
                 </div>
                 <div className="flex items-center space-x-2">
-                    <Badge className={cn("text-white", statusColor)}>{statusLabel}</Badge>
                     <ContractActionsMenu contract={contract} onEdit={onEdit} onDelete={onDelete} onDuplicate={onDuplicate} onCancel={onCancel} />
                 </div>
             </CardHeader>
@@ -125,25 +123,38 @@ const ContractCard: React.FC<ContractCardProps> = ({ contract, onEdit, onDelete,
                         <p className="font-medium text-sidebar-primary-foreground">{contract.service}</p>
                     </div>
                     <div>
-                        <p className="text-gray-400">Valor Total</p>
+                        <div className="flex items-center justify-between gap-2">
+                            <p className="text-gray-400">Valor Total</p>
+                            <Badge className={cn("text-white shrink-0", statusColor)}>{statusLabel}</Badge>
+                        </div>
                         <p className="font-bold text-green-500">{formatCurrency(contract.totalContractValue)}</p>
                     </div>
                 </div>
                 <Separator className="bg-sidebar-border" />
                 <div className="space-y-3">
                     <h4 className="text-sm font-semibold text-sidebar-primary-foreground">Parcelas ({contract.installments.length})</h4>
-                    {contract.installments.map((installment, index) => (
-                        <div key={installment.id} className="grid grid-cols-3 items-center text-sm">
-                            <div className="flex items-center space-x-1">
-                                <span className="font-medium text-sidebar-primary-foreground">{index + 1}</span>
-                                <span className="text-xs text-gray-500">({installment.dueDate ? format(parseISO(installment.dueDate), "dd/MM") : 'N/A'})</span>
+                    {contract.installments.map((installment, index) => {
+                        const paidInfo = getInstallmentPaidInfo(installment);
+                        return (
+                            <div key={installment.id} className="grid grid-cols-3 items-center text-sm">
+                                <div className="flex items-center space-x-1">
+                                    <span className="font-medium text-sidebar-primary-foreground">{index + 1}</span>
+                                    <span className="text-xs text-gray-500">({installment.dueDate ? format(parseISO(installment.dueDate), "dd/MM") : 'N/A'})</span>
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="font-bold text-sidebar-primary-foreground">{formatCurrency(installment.value)}</span>
+                                    {paidInfo.isPartial && (
+                                        <span className="text-[10px] text-orange-400">
+                                            recebido {formatCurrency(paidInfo.received)} de {formatCurrency(paidInfo.original)}
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="flex justify-end">
+                                    <InstallmentStatusTag installment={installment} isContractCanceled={isCanceled && !installment.isPaid} />
+                                </div>
                             </div>
-                            <span className="font-bold text-sidebar-primary-foreground">{formatCurrency(installment.value)}</span>
-                            <div className="flex justify-end">
-                                <InstallmentStatusTag installment={installment} isContractCanceled={isCanceled && !installment.isPaid} />
-                            </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
                 <Separator className="bg-sidebar-border" />
                 <div className="flex justify-between text-sm font-semibold">
@@ -169,16 +180,14 @@ const Contratos = () => {
 
     if (statusFilter === "Ativos") {
         list = list.filter(c => {
-            const totalPaid = c.installments.reduce((sum, i) => sum + (i.paidValue || (i.isPaid ? i.value : 0)), 0);
-            const isFinished = (c.totalContractValue - totalPaid) <= 0;
+            const isFinished = getContractRemaining(c) <= 0;
             return !c.isCanceled && !isFinished;
         });
     } else if (statusFilter === "Cancelados") {
         list = list.filter(c => c.isCanceled);
     } else if (statusFilter === "Finalizados") {
         list = list.filter(c => {
-            const totalPaid = c.installments.reduce((sum, i) => sum + (i.paidValue || (i.isPaid ? i.value : 0)), 0);
-            const isFinished = (c.totalContractValue - totalPaid) <= 0;
+            const isFinished = getContractRemaining(c) <= 0;
             return isFinished && !c.isCanceled;
         });
     }

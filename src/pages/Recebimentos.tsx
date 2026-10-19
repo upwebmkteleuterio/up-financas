@@ -1,6 +1,7 @@
 import Layout from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useRecebimentos } from "@/hooks/useRecebimentos";
 import { cn } from "@/lib/utils";
 import { DollarSign, Calendar, CheckCircle } from "lucide-react";
@@ -155,7 +156,7 @@ const RecebimentoItem: React.FC<RecebimentoItemProps> = ({ recebimento, onMarkAs
       <div className="flex justify-between items-center w-full md:w-auto md:ml-4 mt-3 md:mt-0 flex-shrink-0">
         <div className="flex flex-col items-start md:items-end">
           <HiddenValue
-            value={recebimento.value}
+            value={recebimento.remaining}
             formatFn={formatCurrency}
             className="font-bold whitespace-nowrap text-lg"
           />
@@ -163,7 +164,7 @@ const RecebimentoItem: React.FC<RecebimentoItemProps> = ({ recebimento, onMarkAs
         </div>
         <div className="flex space-x-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity ml-4">
           <MarkAsPaidDialog
-            installmentValue={recebimento.value}
+            installmentValue={recebimento.remaining}
             installmentDueDate={recebimento.dueDate}
             hasNextInstallment={recebimento.hasNextInstallment}
             onConfirm={handleConfirmPayment}
@@ -185,9 +186,10 @@ const RecebimentoItem: React.FC<RecebimentoItemProps> = ({ recebimento, onMarkAs
 };
 
 const Recebimentos = () => {
-  const { filterRecebimentos, summary } = useRecebimentos();
+  const { filterRecebimentos, filterRecebidos, summary } = useRecebimentos();
   const { markInstallmentAsPaid, isLoadingContracts } = useSales();
   
+  const [activeTab, setActiveTab] = useState<"a_receber" | "recebidos">("a_receber");
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilter, setDateFilter] = useState<FilterPeriod>(`month_${new Date().getMonth()}` as FilterPeriod);
   const [customDateRange, setCustomDateRange] = useState<{ start: Date | undefined; end: Date | undefined }>({
@@ -198,10 +200,16 @@ const Recebimentos = () => {
   const filteredRecebimentos = useMemo(() => {
     return filterRecebimentos(searchQuery, dateFilter, customDateRange);
   }, [filterRecebimentos, searchQuery, dateFilter, customDateRange]);
+
+  const filteredRecebidos = useMemo(() => filterRecebidos(searchQuery, dateFilter, customDateRange), [filterRecebidos, searchQuery, dateFilter, customDateRange]);
   
   const totalRecebimentosFiltered = useMemo(() => {
-      return filteredRecebimentos.reduce((sum, r) => sum + r.value, 0);
+      return filteredRecebimentos.reduce((sum, r) => sum + r.remaining, 0);
   }, [filteredRecebimentos]);
+
+  const totalRecebidosFiltered = useMemo(() =>
+    filteredRecebidos.reduce((sum, r) => sum + r.receivedValue, 0), [filteredRecebidos]
+  );
 
   return (
     <Layout 
@@ -222,8 +230,8 @@ const Recebimentos = () => {
         </div>
 
         <SummaryStrip
-          title="Total de Recebimentos Pendentes (Período Filtrado)"
-          value={totalRecebimentosFiltered}
+          title={activeTab === "a_receber" ? "Total de Recebimentos Pendentes (Período Filtrado)" : "Total Recebido (Período Filtrado)"}
+          value={activeTab === "a_receber" ? totalRecebimentosFiltered : totalRecebidosFiltered}
           dateFilter={dateFilter}
         />
         
@@ -238,55 +246,97 @@ const Recebimentos = () => {
         </div>
 
         <Card className="bg-sidebar border-sidebar-border text-sidebar-foreground">
-          <CardHeader className="p-4">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <SearchInput 
-                    value={searchQuery}
-                    onChange={setSearchQuery}
-                    placeholder="Buscar por cliente ou serviço..."
-                />
-                <FilterDropdown
-                    activeFilter={dateFilter}
-                    setActiveFilter={setDateFilter}
-                    customDateRange={customDateRange}
-                    setCustomDateRange={setCustomDateRange}
-                    allowedFilters={[
-                        "month_0", "month_1", "month_2", "month_3", "month_4", "month_5",
-                        "month_6", "month_7", "month_8", "month_9", "month_10", "month_11",
-                        "custom"
-                    ]}
-                />
-            </div>
-            
-            <Separator className="my-4 bg-sidebar-border" />
-            
-            <CardTitle className="text-xl font-bold">
-                Recebimentos Pendentes ({filteredRecebimentos.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="space-y-1">
-              {isLoadingContracts && filteredRecebimentos.length === 0 ? (
-                <div className="space-y-1">
-                    {Array.from({ length: 5 }).map((_, index) => (
-                        <ContractItemSkeleton key={index} />
-                    ))}
-                </div>
-              ) : filteredRecebimentos.length > 0 ? (
-                filteredRecebimentos.map((r) => (
-                  <RecebimentoItem
-                    key={`${r.contractId}-${r.id}`}
-                    recebimento={r}
-                    onMarkAsPaid={markInstallmentAsPaid}
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "a_receber" | "recebidos")} className="w-full">
+            <CardHeader className="p-4">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <SearchInput
+                      value={searchQuery}
+                      onChange={setSearchQuery}
+                      placeholder="Buscar por cliente ou serviço..."
                   />
-                ))
-              ) : (
-                <p className="text-center text-gray-500 p-8">
-                  Nenhum recebimento pendente encontrado com os filtros aplicados.
-                </p>
-              )}
-            </div>
-          </CardContent>
+                  <FilterDropdown
+                      activeFilter={dateFilter}
+                      setActiveFilter={setDateFilter}
+                      customDateRange={customDateRange}
+                      setCustomDateRange={setCustomDateRange}
+                      allowedFilters={[
+                          "month_0", "month_1", "month_2", "month_3", "month_4", "month_5",
+                          "month_6", "month_7", "month_8", "month_9", "month_10", "month_11",
+                          "custom"
+                      ]}
+                  />
+              </div>
+              
+              <Separator className="my-4 bg-sidebar-border" />
+              
+              <TabsList className="bg-sidebar-accent/50">
+                <TabsTrigger value="a_receber">A receber ({filteredRecebimentos.length})</TabsTrigger>
+                <TabsTrigger value="recebidos">Recebidos ({filteredRecebidos.length})</TabsTrigger>
+              </TabsList>
+            </CardHeader>
+            <CardContent className="p-0">
+              <TabsContent value="a_receber" className="mt-0">
+                <div className="space-y-1">
+                  {isLoadingContracts && filteredRecebimentos.length === 0 ? (
+                    <div className="space-y-1">
+                        {Array.from({ length: 5 }).map((_, index) => (
+                            <ContractItemSkeleton key={index} />
+                        ))}
+                    </div>
+                  ) : filteredRecebimentos.length > 0 ? (
+                    filteredRecebimentos.map((r) => (
+                      <RecebimentoItem
+                        key={`${r.contractId}-${r.id}`}
+                        recebimento={r}
+                        onMarkAsPaid={markInstallmentAsPaid}
+                      />
+                    ))
+                  ) : (
+                    <p className="text-center text-gray-500 p-8">
+                      Nenhum recebimento pendente encontrado com os filtros aplicados.
+                    </p>
+                  )}
+                </div>
+              </TabsContent>
+              <TabsContent value="recebidos" className="mt-0">
+                <div className="space-y-1">
+                  {isLoadingContracts && filteredRecebidos.length === 0 ? (
+                    <div className="space-y-1">
+                      {Array.from({ length: 5 }).map((_, index) => <ContractItemSkeleton key={index} />)}
+                    </div>
+                  ) : filteredRecebidos.length > 0 ? (
+                    filteredRecebidos.map((recebido) => (
+                      <div key={`${recebido.contractId}-${recebido.id}`} className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border-b border-sidebar-border hover:bg-sidebar-accent/30 transition-colors">
+                        <div className="flex items-center space-x-4 flex-1 min-w-0 w-full md:w-auto">
+                          <div className="p-2 rounded-lg bg-green-900/50 flex-shrink-0">
+                            <DollarSign className="w-5 h-5 text-green-500" />
+                          </div>
+                          <div className="flex flex-col flex-1 min-w-0">
+                            <span className="font-semibold text-sidebar-primary-foreground truncate">{recebido.clientName}</span>
+                            <span className="text-xs text-gray-400 mt-1 truncate">
+                              {recebido.service} • Recebido em {format(parseISO(recebido.receivedDate), "dd/MM/yyyy")}{recebido.isPartial ? " • parcial" : ""}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-start md:items-end w-full md:w-auto md:ml-4 mt-3 md:mt-0 flex-shrink-0">
+                          <HiddenValue
+                            value={recebido.receivedValue}
+                            formatFn={formatCurrency}
+                            className="font-bold whitespace-nowrap text-lg text-green-500"
+                          />
+                          <span className="text-xs text-gray-400 mt-1 whitespace-nowrap">Vencimento: {format(parseISO(recebido.dueDate), "dd/MM/yyyy")}</span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-center text-gray-500 p-8">
+                      Nenhum recebimento recebido encontrado com os filtros aplicados.
+                    </p>
+                  )}
+                </div>
+              </TabsContent>
+            </CardContent>
+          </Tabs>
         </Card>
       </div>
     </Layout>
