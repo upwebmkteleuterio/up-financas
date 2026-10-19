@@ -68,6 +68,16 @@ export function useSales() {
             notes: contract.notes ? `Venda: ${contract.notes}` : undefined,
             isAutomated: true,
             sourceContractId: contract.id,
+            contractInstallment: {
+                installmentId: firstInstallment.id,
+                number: 1,
+                total: installments.length,
+                isResidual: firstInstallment.isResidual === true,
+                isPartial: false,
+                referenceNumber: firstInstallment.generatedFromNumber,
+                originalValue: firstInstallment.value,
+                receivedValue: firstInstallment.value,
+            },
         };
 
         if (existingTransaction) {
@@ -145,15 +155,15 @@ export function useSales() {
     if (installmentIndex === -1) return;
 
     const installment = updatedInstallments[installmentIndex];
+    const installmentNumber = installmentIndex + 1;
+    const installmentTotal = updatedInstallments.length;
     const isPartial = paidValue < installment.value && paidValue > 0;
+    const isResidual = installment.isResidual === true;
     const remainder = installment.value - paidValue;
 
     // 1. Atualiza a parcela atual
     updatedInstallments[installmentIndex] = {
         ...installment,
-        // Em recebimento parcial o valor da parcela passa a ser exatamente o que foi
-        // recebido, e o resíduo vira outra parcela. Sem isso a soma das parcelas do
-        // contrato passaria a ser maior que o valor total do contrato.
         ...(isPartial ? { originalValue: installment.originalValue ?? installment.value } : {}),
         value: paidValue,
         paidValue: paidValue,
@@ -162,15 +172,32 @@ export function useSales() {
     };
 
     // 2. Lança no financeiro o valor REAL recebido
+    const descriptionPrefix = isResidual
+        ? "Recebimento de Resíduo"
+        : isPartial
+            ? "Recebimento Parcial"
+            : "Recebimento";
+    const descriptionSuffix = `(Parcela ${installmentNumber} de ${installmentTotal}${isResidual && installment.generatedFromNumber ? `, resíduo da parcela ${installment.generatedFromNumber}` : ''})`;
+
     const newTransaction: Omit<Transaction, "id"> = {
         type: "Entrada",
         category: "Vendas",
-        description: `${isPartial ? 'Recebimento Parcial' : 'Recebimento'} - ${contract.clientName} - ${contract.service} (Parcela ${installmentId.slice(-4)})`,
+        description: `${descriptionPrefix} - ${contract.clientName} - ${contract.service} ${descriptionSuffix}`,
         value: paidValue,
         date: paymentDate.toISOString().split("T")[0],
         paymentMethod: "Pix",
         notes: `Recebimento de parcela do contrato ${contract.id}. Valor original: ${installment.value}`,
         sourceContractId: contract.id,
+        contractInstallment: {
+            installmentId,
+            number: installmentNumber,
+            total: installmentTotal,
+            isResidual,
+            isPartial,
+            referenceNumber: isResidual ? installment.generatedFromNumber : undefined,
+            originalValue: installment.value,
+            receivedValue: paidValue,
+        },
     };
     addTransaction(newTransaction);
 
@@ -190,7 +217,10 @@ export function useSales() {
                     id: `res-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
                     value: remainder,
                     dueDate: format(addMonths(parseISO(installment.dueDate), 1), 'yyyy-MM-dd'),
-                    isPaid: false
+                    isPaid: false,
+                    isResidual: true,
+                    generatedFrom: installmentId,
+                    generatedFromNumber: installmentNumber,
                 });
             }
         } else if (remainderAction === 'create_new' && newInstallmentDate) {
@@ -198,7 +228,10 @@ export function useSales() {
                 id: `res-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
                 value: remainder,
                 dueDate: newInstallmentDate.toISOString().split("T")[0],
-                isPaid: false
+                isPaid: false,
+                isResidual: true,
+                generatedFrom: installmentId,
+                generatedFromNumber: installmentNumber,
             });
         }
     }

@@ -67,6 +67,17 @@ export interface AccountBalance {
   updatedAt?: string;
 }
 
+export interface ContractInstallmentPaymentInfo {
+  installmentId: string;
+  number: number;
+  total: number;
+  isResidual: boolean;
+  isPartial: boolean;
+  referenceNumber?: number;
+  originalValue: number;
+  receivedValue: number;
+}
+
 export interface Transaction {
   id: string;
   type: TransactionType;
@@ -81,6 +92,7 @@ export interface Transaction {
   createdSource?: "manual" | "ai" | "pdf" | "system";
   operationId?: string;
   sourceContractId?: string; // ID do contrato de origem
+  contractInstallment?: ContractInstallmentPaymentInfo;
   accountType?: AccountType; // main ou reserve
   isTransfer?: boolean; // identifica se é transferência entre contas
   transferGroupId?: string;
@@ -100,6 +112,9 @@ export interface ContractInstallment {
   paidValue?: number;
   paidDate?: string;
   originalValue?: number; // valor original da parcela antes de um recebimento parcial
+  isResidual?: boolean; // parcela criada como resíduo de um recebimento parcial
+  generatedFrom?: string; // id da parcela que originou este resíduo
+  generatedFromNumber?: number; // número (1-based) da parcela que originou este resíduo
 }
 
 export interface Contract {

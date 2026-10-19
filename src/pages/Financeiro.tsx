@@ -137,6 +137,7 @@ const TransactionItem: React.FC<TransactionItemProps> = ({ transaction, onDelete
   }
   
   const sign = isEntry ? "+" : "-";
+  const installmentInfo = transaction.contractInstallment;
   
   let mainText: string;
   let secondaryText: string;
@@ -174,15 +175,31 @@ const TransactionItem: React.FC<TransactionItemProps> = ({ transaction, onDelete
             />
             
             <div className="flex flex-col flex-1 min-w-0">
-              <span className="font-semibold text-sidebar-primary-foreground truncate">
-                {mainText}
-              </span>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-semibold text-sidebar-primary-foreground truncate">
+                  {mainText}
+                </span>
+                {installmentInfo && (
+                  <span className={cn(
+                    "text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0",
+                    installmentInfo.isPartial
+                      ? "bg-orange-900/50 text-orange-400"
+                      : installmentInfo.isResidual
+                        ? "bg-purple-900/50 text-purple-300"
+                        : "bg-green-900/50 text-green-400"
+                  )}>
+                    {installmentInfo.isPartial ? "Pago parcial" : installmentInfo.isResidual ? "Resíduo" : "Recebido"}
+                  </span>
+                )}
+              </div>
               <span className="text-xs text-gray-400 mt-1 truncate">
-                {secondaryText}
+                {installmentInfo
+                  ? `${secondaryText} • Parcela ${installmentInfo.number} de ${installmentInfo.total}`
+                  : secondaryText}
               </span>
             </div>
           </div>
-          
+
           <div className="flex justify-between items-center w-full md:w-auto md:ml-4 mt-3 md:mt-0 flex-shrink-0">
             <div className="flex flex-col items-start md:items-end">
               <HiddenValue

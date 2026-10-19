@@ -77,6 +77,10 @@ interface FormInstallment {
     isPaid?: boolean;
     paidValue?: number;
     paidDate?: string;
+    originalValue?: number;
+    isResidual?: boolean;
+    generatedFrom?: string;
+    generatedFromNumber?: number;
 }
 
 interface FormState extends Omit<Contract, "id" | "totalContractValue" | "installments" | "isRecurrenceValueFixed" | "dateClosed"> {
@@ -113,6 +117,10 @@ const getInitialFormState = (initialData?: Contract, partialData?: PartialInitia
             isPaid: i.isPaid,
             paidValue: i.paidValue,
             paidDate: i.paidDate,
+            originalValue: i.originalValue,
+            isResidual: i.isResidual,
+            generatedFrom: i.generatedFrom,
+            generatedFromNumber: i.generatedFromNumber,
         }));
         
         initialDateClosed = createLocalDateFromISO(initialData.dateClosed);
@@ -329,7 +337,11 @@ const ContractFormDialog: React.FC<ContractFormDialogProps> = ({
                 dueDate: format(date, 'yyyy-MM-dd'),
                 isPaid,
                 paidValue: formData.installments[0]?.paidValue,
-                paidDate: formData.installments[0]?.paidDate
+                paidDate: formData.installments[0]?.paidDate,
+                originalValue: formData.installments[0]?.originalValue,
+                isResidual: formData.installments[0]?.isResidual,
+                generatedFrom: formData.installments[0]?.generatedFrom,
+                generatedFromNumber: formData.installments[0]?.generatedFromNumber,
             }];
             totalContractValue = value;
         }
@@ -344,7 +356,11 @@ const ContractFormDialog: React.FC<ContractFormDialogProps> = ({
                 dueDate: format(i.date, 'yyyy-MM-dd'),
                 isPaid: i.isPaid || false,
                 paidValue: i.paidValue,
-                paidDate: i.paidDate
+                paidDate: i.paidDate,
+                originalValue: i.originalValue,
+                isResidual: i.isResidual,
+                generatedFrom: i.generatedFrom,
+                generatedFromNumber: i.generatedFromNumber,
             }));
             totalContractValue = finalInstallments.reduce((sum, i) => sum + i.value, 0);
         }
@@ -367,7 +383,11 @@ const ContractFormDialog: React.FC<ContractFormDialogProps> = ({
                         dueDate: format(dueDate, 'yyyy-MM-dd'),
                         isPaid: existingInstallment?.isPaid || false,
                         paidValue: existingInstallment?.paidValue,
-                        paidDate: existingInstallment?.paidDate
+                        paidDate: existingInstallment?.paidDate,
+                        originalValue: existingInstallment?.originalValue,
+                        isResidual: existingInstallment?.isResidual,
+                        generatedFrom: existingInstallment?.generatedFrom,
+                        generatedFromNumber: existingInstallment?.generatedFromNumber,
                     });
                     totalContractValue += value;
                 }
@@ -388,7 +408,11 @@ const ContractFormDialog: React.FC<ContractFormDialogProps> = ({
                     dueDate: format(firstDate, 'yyyy-MM-dd'),
                     isPaid: existingFirst?.isPaid || false,
                     paidValue: existingFirst?.paidValue,
-                    paidDate: existingFirst?.paidDate
+                    paidDate: existingFirst?.paidDate,
+                    originalValue: existingFirst?.originalValue,
+                    isResidual: existingFirst?.isResidual,
+                    generatedFrom: existingFirst?.generatedFrom,
+                    generatedFromNumber: existingFirst?.generatedFromNumber,
                 });
                 totalContractValue += firstValue;
                 let currentDate = firstDate;
@@ -401,7 +425,11 @@ const ContractFormDialog: React.FC<ContractFormDialogProps> = ({
                         dueDate: format(dueDate, 'yyyy-MM-dd'),
                         isPaid: existingOther?.isPaid || false,
                         paidValue: existingOther?.paidValue,
-                        paidDate: existingOther?.paidDate
+                        paidDate: existingOther?.paidDate,
+                        originalValue: existingOther?.originalValue,
+                        isResidual: existingOther?.isResidual,
+                        generatedFrom: existingOther?.generatedFrom,
+                        generatedFromNumber: existingOther?.generatedFromNumber,
                     });
                     totalContractValue += otherValue;
                     currentDate = dueDate;

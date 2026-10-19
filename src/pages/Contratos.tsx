@@ -148,6 +148,11 @@ const ContractCard: React.FC<ContractCardProps> = ({ contract, onEdit, onDelete,
                                             recebido {formatCurrency(paidInfo.received)} de {formatCurrency(paidInfo.original)}
                                         </span>
                                     )}
+                                    {installment.isResidual && (
+                                        <span className="text-[10px] text-purple-400">
+                                            resíduo da parcela {installment.generatedFromNumber ?? "?"}
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="flex justify-end">
                                     <InstallmentStatusTag installment={installment} isContractCanceled={isCanceled && !installment.isPaid} />
