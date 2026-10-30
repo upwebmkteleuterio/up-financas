@@ -23,7 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
-import { TextReveal } from "@/components/ui/text-reveal";
+import MarkdownMessage from "@/components/MarkdownMessage";
 import { ThinkingOrb } from "@/components/ui/thinking-orbs";
 import type { AiChatMessage, AiDiagnosticStage, AiDiagnostics, AiToolActivity } from "@/types/finance-ai";
 
@@ -296,7 +296,7 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
                         </div>
                       );
                     })}
-                    <p>{message.content}</p>
+                    <MarkdownMessage content={message.content} />
                     <DiagnosticPanel diagnostics={message.diagnostics} requestId={message.requestId} />
                     {messageTime && <time dateTime={message.timestamp} className="block text-right text-[10px] leading-4 text-slate-500">{messageTime}</time>}
                   </div>
@@ -368,28 +368,17 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
           {error && <p role="alert" className="mb-2 px-1 text-xs text-red-300">{error}</p>}
           {speechMessage && <p className="mb-2 px-1 text-xs text-slate-400">{speechMessage}</p>}
           <form onSubmit={onSubmit} className="rounded-2xl border border-white/[0.12] bg-white/[0.06] p-2 shadow-2xl shadow-black/20 backdrop-blur-xl">
-            <div className="relative overflow-hidden">
-              {isRecording && input.trim() && (
-                <TextReveal
-                  text={input}
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 z-0 m-0 overflow-hidden whitespace-pre-wrap break-words px-2 py-2 text-sm text-white"
-                />
-              )}
-              <Textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(event) => onInputChange(event.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ex.: lançar saída de R$ 120 de software hoje"
-                rows={1}
-                disabled={isLoading}
-                className={`relative z-10 max-h-40 !min-h-10 resize-none overflow-hidden border-0 bg-transparent px-2 py-2 text-sm shadow-none placeholder:text-slate-500 focus-visible:ring-0 ${
-                  isRecording && input.trim() ? "text-transparent caret-white selection:bg-white/20 selection:text-transparent" : "text-white"
-                }`}
-                aria-label="Mensagem para o assistente"
-              />
-            </div>
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(event) => onInputChange(event.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ex.: lançar saída de R$ 120 de software hoje"
+              rows={1}
+              disabled={isLoading}
+              className="max-h-40 !min-h-10 resize-none overflow-hidden border-0 bg-transparent px-2 py-2 text-sm text-white shadow-none placeholder:text-slate-500 focus-visible:ring-0"
+              aria-label="Mensagem para o assistente"
+            />
             <div className="flex items-center justify-between gap-2 px-1 pt-1">
               <Button
                 type="button"

@@ -183,9 +183,9 @@ const Sidebar: React.FC<SidebarProps> = ({
           </section>
 
           <section className="mt-3 border-t border-sidebar-border pt-3">
-            {!isRail && <h2 className="text-xs font-semibold uppercase text-gray-500 mb-2 px-3">Saídas e fluxo</h2>}
-            <NavItem to="/programacao-saidas" icon={<CalendarClock className="w-5 h-5" />} label="Programação Saídas" isCollapsed={isRail} />
-            <NavItem to="/saidas" icon={<CircleDollarSign className="w-5 h-5" />} label="Saídas" isCollapsed={isRail} />
+            {!isRail && <h2 className="text-xs font-semibold uppercase text-gray-500 mb-2 px-3">Despesas e fluxo</h2>}
+            <NavItem to="/programacao-saidas" icon={<CalendarClock className="w-5 h-5" />} label="Programação de Despesas" isCollapsed={isRail} />
+            <NavItem to="/saidas" icon={<CircleDollarSign className="w-5 h-5" />} label="Despesas" isCollapsed={isRail} />
             <NavItem to="/fluxo-caixa" icon={<ChartNoAxesCombined className="w-5 h-5" />} label="Fluxo de Caixa" isCollapsed={isRail} />
           </section>
 

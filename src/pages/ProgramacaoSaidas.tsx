@@ -53,9 +53,9 @@ export default function ProgramacaoSaidas() {
     && (kind === "all" || p.kind === kind)
   ), [programs, search, period, range.start?.getTime(), range.end?.getTime(), status, kind]);
 
-  return <Layout pageTitle="Programação Saídas" pageSubtitle="Regras de custos, gastos e demais saídas previstas.">
+  return <Layout pageTitle="Programação de Despesas" pageSubtitle="Regras de custos, gastos e demais despesas previstas.">
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><h1 className="text-3xl font-bold text-sidebar-primary-foreground">Programação Saídas</h1><p className="mt-1 text-gray-400">Cadastre e mantenha regras de saídas e categorias ativas.</p></div>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><h1 className="text-3xl font-bold text-sidebar-primary-foreground">Programação de Despesas</h1><p className="mt-1 text-gray-400">Cadastre e mantenha regras de despesas e categorias ativas.</p></div>
         <OutgoingProgramFormDialog trigger={<Button className="bg-green-600 text-white hover:bg-green-700"><Plus className="mr-2 h-4 w-4" />Nova Programação</Button>} />
       </div>
       <Card className="border-sidebar-border bg-sidebar text-sidebar-foreground">

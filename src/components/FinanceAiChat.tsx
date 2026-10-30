@@ -410,7 +410,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     setIsRecording(false);
   };
 
-  const startRecording = () => {
+  const startRecording = async () => {
     const SpeechRecognition = (window as SpeechWindow).SpeechRecognition || (window as SpeechWindow).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setSpeechMessage("Seu navegador não oferece reconhecimento de voz. Digite a mensagem.");
@@ -425,6 +425,22 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
         setIsRecording(false);
       }
       return;
+    }
+
+    if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      } catch (caught) {
+        const name = caught instanceof Error ? caught.name : "";
+        setSpeechMessage(
+          name === "NotAllowedError"
+            ? "Permita o acesso ao microfone no navegador para usar a voz."
+            : "Não foi possível acessar o microfone. Verifique o dispositivo e tente novamente.",
+        );
+        return;
+      }
+      if (recognitionRef.current) return;
     }
 
     speechResultsRef.current.clear();
@@ -449,7 +465,18 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     };
     recognition.onerror = (event) => {
       if (recognitionRef.current !== recognition) return;
-      setSpeechMessage(event.error === "not-allowed" ? "Permita o microfone para usar a voz." : "Não foi possível reconhecer a fala.");
+      const code = event.error;
+      setSpeechMessage(
+        code === "not-allowed" || code === "service-not-allowed"
+          ? "Permita o acesso ao microfone no navegador para usar a voz."
+          : code === "no-speech"
+            ? "Nenhuma fala foi detectada. Fale mais perto do microfone e tente novamente."
+            : code === "audio-capture"
+              ? "Nenhum microfone foi encontrado neste dispositivo."
+              : code === "network"
+                ? "Não foi possível conectar ao serviço de voz. Verifique sua internet."
+                : "Não foi possível reconhecer a fala. Tente novamente.",
+      );
       finishRecording(recognition, true);
     };
     recognition.onend = () => {
