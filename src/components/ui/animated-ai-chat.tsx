@@ -34,6 +34,7 @@ interface AnimatedAiChatProps {
   isRecording: boolean;
   error: string | null;
   speechMessage: string | null;
+  speechDebug?: string | null;
   retryMessage: string | null;
   onRetry: () => void | Promise<void>;
   draft?: React.ReactNode;
@@ -180,6 +181,7 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
   isRecording,
   error,
   speechMessage,
+  speechDebug,
   retryMessage,
   onRetry,
   draft,
@@ -367,6 +369,7 @@ const AnimatedAiChat: React.FC<AnimatedAiChatProps> = ({
         <div className="mx-auto w-full max-w-4xl">
           {error && <p role="alert" className="mb-2 px-1 text-xs text-red-300">{error}</p>}
           {speechMessage && <p className="mb-2 px-1 text-xs text-slate-400">{speechMessage}</p>}
+          {speechDebug && <p className="mb-2 px-1 font-mono text-[10px] leading-4 text-sky-300/80">[voz] {speechDebug}</p>}
           <form onSubmit={onSubmit} className="rounded-2xl border border-white/[0.12] bg-white/[0.06] p-2 shadow-2xl shadow-black/20 backdrop-blur-xl">
             <Textarea
               ref={textareaRef}

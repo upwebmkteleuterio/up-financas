@@ -34,12 +34,33 @@ interface SpeechRecognitionLike {
   lang: string;
   interimResults: boolean;
   continuous: boolean;
+  maxAlternatives: number;
+  onstart: (() => void) | null;
+  onaudiostart: (() => void) | null;
+  onsoundstart: (() => void) | null;
+  onspeechstart: (() => void) | null;
+  onspeechend: (() => void) | null;
+  onsoundend: (() => void) | null;
+  onaudioend: (() => void) | null;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: { error: string }) => void) | null;
+  onerror: ((event: { error: string; message?: string }) => void) | null;
   onend: (() => void) | null;
   start: () => void;
   stop: () => void;
 }
+
+const detachRecognition = (recognition: SpeechRecognitionLike) => {
+  recognition.onstart = null;
+  recognition.onaudiostart = null;
+  recognition.onsoundstart = null;
+  recognition.onspeechstart = null;
+  recognition.onspeechend = null;
+  recognition.onsoundend = null;
+  recognition.onaudioend = null;
+  recognition.onresult = null;
+  recognition.onerror = null;
+  recognition.onend = null;
+};
 
 type SpeechResult = Pick<SpeechRecognitionResultItem, "transcript" | "isFinal">;
 
@@ -97,6 +118,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
   const [retryMessage, setRetryMessage] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [speechMessage, setSpeechMessage] = useState<string | null>(null);
+  const [voiceDebug, setVoiceDebug] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [prompt, setPrompt] = useState(DEFAULT_FINANCE_AI_PROMPT);
   const [savedPrompt, setSavedPrompt] = useState(DEFAULT_FINANCE_AI_PROMPT);
@@ -111,6 +133,8 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
   const voiceSendTimerRef = useRef<number | null>(null);
   const speechResultsRef = useRef<Map<number, SpeechResult>>(new Map());
   const voiceBaseInputRef = useRef("");
+  const voiceDebugRef = useRef<string[]>([]);
+  const lastVoiceTranscriptRef = useRef("");
   const messageIdRef = useRef(0);
   const lastSentMessageRef = useRef<string | null>(null);
   const executionOperationIdRef = useRef<string | null>(null);
@@ -120,9 +144,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     if (voiceSendTimerRef.current !== null) window.clearTimeout(voiceSendTimerRef.current);
     const recognition = recognitionRef.current;
     if (recognition) {
-      recognition.onresult = null;
-      recognition.onerror = null;
-      recognition.onend = null;
+      detachRecognition(recognition);
       recognition.stop();
     }
   }, []);
@@ -284,9 +306,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     setInput(finalInput);
     const recognition = recognitionRef.current;
     if (recognition) {
-      recognition.onresult = null;
-      recognition.onerror = null;
-      recognition.onend = null;
+      detachRecognition(recognition);
       recognitionRef.current = null;
       recognition.stop();
     }
@@ -401,18 +421,23 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     if (finalize) finalizeVoiceTranscript(true);
     const activeRecognition = recognitionRef.current;
     if (activeRecognition) {
-      activeRecognition.onresult = null;
-      activeRecognition.onerror = null;
-      activeRecognition.onend = null;
+      detachRecognition(activeRecognition);
       recognitionRef.current = null;
       activeRecognition.stop();
     }
     setIsRecording(false);
   };
 
+  const logVoice = (event: string) => {
+    console.info(`[voz] ${event}`);
+    voiceDebugRef.current = [...voiceDebugRef.current, event].slice(-10);
+    setVoiceDebug(voiceDebugRef.current.join(" · "));
+  };
+
   const startRecording = async () => {
     const SpeechRecognition = (window as SpeechWindow).SpeechRecognition || (window as SpeechWindow).webkitSpeechRecognition;
     if (!SpeechRecognition) {
+      logVoice("navegador sem suporte a SpeechRecognition");
       setSpeechMessage("Seu navegador não oferece reconhecimento de voz. Digite a mensagem.");
       return;
     }
@@ -427,12 +452,23 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
       return;
     }
 
+    voiceDebugRef.current = [];
+    lastVoiceTranscriptRef.current = "";
+    setVoiceDebug(null);
+    logVoice("clique no microfone recebido");
+
     if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
       try {
+        logVoice("solicitando permissão do microfone");
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((track) => track.stop());
+        const track = stream.getAudioTracks()[0];
+        logVoice(track
+          ? `microfone ok: ${track.label || "sem nome"} (muted=${track.muted}, enabled=${track.enabled})`
+          : "nenhuma faixa de áudio encontrada");
+        stream.getTracks().forEach((item) => item.stop());
       } catch (caught) {
         const name = caught instanceof Error ? caught.name : "";
+        logVoice(`falha ao obter microfone: ${name || "erro desconhecido"}`);
         setSpeechMessage(
           name === "NotAllowedError"
             ? "Permita o acesso ao microfone no navegador para usar a voz."
@@ -441,6 +477,8 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
         return;
       }
       if (recognitionRef.current) return;
+    } else {
+      logVoice("getUserMedia indisponível (contexto não seguro?)");
     }
 
     speechResultsRef.current.clear();
@@ -450,6 +488,35 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     recognition.lang = "pt-BR";
     recognition.interimResults = true;
     recognition.continuous = true;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => {
+      if (recognitionRef.current !== recognition) return;
+      logVoice("reconhecimento iniciado");
+    };
+    recognition.onaudiostart = () => {
+      if (recognitionRef.current !== recognition) return;
+      logVoice("captação de áudio iniciada");
+    };
+    recognition.onsoundstart = () => {
+      if (recognitionRef.current !== recognition) return;
+      logVoice("som detectado");
+    };
+    recognition.onspeechstart = () => {
+      if (recognitionRef.current !== recognition) return;
+      logVoice("fala detectada");
+    };
+    recognition.onspeechend = () => {
+      if (recognitionRef.current !== recognition) return;
+      logVoice("fala encerrada");
+    };
+    recognition.onsoundend = () => {
+      if (recognitionRef.current !== recognition) return;
+      logVoice("som encerrado");
+    };
+    recognition.onaudioend = () => {
+      if (recognitionRef.current !== recognition) return;
+      logVoice("captação de áudio encerrada");
+    };
     recognition.onresult = (event) => {
       if (recognitionRef.current !== recognition) return;
       const snapshot = new Map<number, SpeechResult>();
@@ -458,6 +525,11 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
         if (item) snapshot.set(index, { transcript: item.transcript, isFinal: item.isFinal });
       }
       speechResultsRef.current = snapshot;
+      const transcript = getRawVoiceTranscript();
+      if (transcript && transcript !== lastVoiceTranscriptRef.current) {
+        lastVoiceTranscriptRef.current = transcript;
+        logVoice(`transcrição: "${transcript.slice(0, 120)}"`);
+      }
       updateVoiceInput();
       setSpeechMessage("Ouvindo em português (Brasil)…");
       scheduleSpeechPause();
@@ -466,6 +538,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     recognition.onerror = (event) => {
       if (recognitionRef.current !== recognition) return;
       const code = event.error;
+      logVoice(`erro: ${code}${event.message ? ` (${event.message})` : ""}`);
       setSpeechMessage(
         code === "not-allowed" || code === "service-not-allowed"
           ? "Permita o acesso ao microfone no navegador para usar a voz."
@@ -481,6 +554,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     };
     recognition.onend = () => {
       if (recognitionRef.current !== recognition) return;
+      logVoice("reconhecimento encerrado");
       finishRecording(recognition, true);
       setSpeechMessage("Transcrição pronta. Revise o texto antes de enviar.");
     };
@@ -488,8 +562,10 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
     setSpeechMessage("Ouvindo em português (Brasil)…");
     setIsRecording(true);
     try {
+      logVoice("chamando recognition.start()");
       recognition.start();
     } catch {
+      logVoice("falha ao iniciar o reconhecimento");
       setSpeechMessage("Não foi possível iniciar o reconhecimento de voz.");
       finishRecording(recognition, true);
     }
@@ -596,6 +672,7 @@ const FinanceAiChat: React.FC<FinanceAiChatProps> = ({ onClose }) => {
         isRecording={isRecording}
         error={error}
         speechMessage={speechMessage}
+        speechDebug={voiceDebug}
         retryMessage={retryMessage}
         onRetry={retryLastMessage}
         draft={draftCard}
